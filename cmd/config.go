@@ -12,6 +12,10 @@ package cmd
  */
 
 import (
+	"io"
+	"log/slog"
+	"os"
+
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
@@ -71,10 +75,60 @@ type filestoreOptions struct {
 //
 // Struct members:
 //   - Level: the minimum log severity level to be emitted
-//   - Destination: the location to send emitted records to
+//   - Destination: the locations to send emitted records to
+//   - UseJSON: boolean indicating to emit records as JSON or plaintext
 type loggingOptions struct {
-	Level       int    `mapstructure:"minLevel"`
-	Destination string `mapstructure:"destination"`
+	Level       string   `mapstructure:"minLevel"`
+	Destination []string `mapstructure:"destination"`
+	UseJSON     bool     `mapstructure:"json"`
+}
+
+// Function `initLogs` initializes structured logging for the application
+//
+// Parameters:
+//   - logConfig: a `loggingOptions` instances sourced from the application configuration
+//
+// Returns:
+//   - `error`: issue with logging setup (if any)
+func initLogs(logConfig loggingOptions) error {
+	var level slog.Level
+	var outputs []io.Writer
+	var handler slog.Handler
+	switch logConfig.Level {
+	case "debug":
+		level = slog.LevelDebug
+	case "error":
+		level = slog.LevelError
+	case "warn":
+		level = slog.LevelWarn
+	default:
+		level = slog.LevelInfo
+	}
+
+	for _, dst := range logConfig.Destination {
+		switch dst {
+		case "std.out":
+			outputs = append(outputs, os.Stdout)
+		case "std.err":
+			outputs = append(outputs, os.Stderr)
+		default:
+			if f, err := os.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666); err != nil {
+				return err
+			} else {
+				outputs = append(outputs, f)
+			}
+		}
+	}
+	handlerOpts := slog.HandlerOptions{Level: level, AddSource: true}
+
+	if logConfig.UseJSON {
+		handler = slog.NewJSONHandler(io.MultiWriter(outputs...), &handlerOpts)
+	} else {
+		handler = slog.NewTextHandler(io.MultiWriter(outputs...), &handlerOpts)
+	}
+
+	slog.SetDefault(slog.New(handler))
+	return nil
 }
 
 // Type `AppConfig` manages the application configuration lifecyle using viper

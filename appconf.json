@@ -15,7 +15,11 @@
     "secretKey": "testAPIkey"
   },
   "log": {
-    "minLevel": 5,
-    "destination": "std.out"
+    "minLevel": "debug",
+    "destination": [
+      "std.out",
+      "/tmp/log/tournabyte/webapi.log"
+    ],
+    "json": true
   }
 }
