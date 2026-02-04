@@ -1,0 +1,21 @@
+{
+  "serve": {
+    "port": "7000"
+  },
+  "mongodb": {
+    "hosts": [
+      "127.0.0.1:27017"
+    ],
+    "username": "testAPIuser",
+    "password": "testAPIkey"
+  },
+  "minio": {
+    "endpoint": "localhost:4000",
+    "accessKey": "testAPIuser",
+    "secretKey": "testAPIkey"
+  },
+  "log": {
+    "minLevel": 5,
+    "destination": "std.out"
+  }
+}
