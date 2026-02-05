@@ -1,7 +1,7 @@
 # Makefile for the Tournabyte webapi
 
-CMD_DIR  ?= $(shell pwd)
-BUILD_DIR ?= $(CMD_DIR)/bin
+CMD_DIR  ?= $(shell pwd)/app/start
+BUILD_DIR ?= $(shell pwd)/bin
 APP_NAME ?= tbyte-webapi
 
 GO  ?= go
@@ -16,7 +16,7 @@ BUILD_TIME := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 help: ## Display this message and exit
 	@echo "Makefile for the Tournabyte API webserver. Available targets:"
-  @grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
 build: ## Build the go application
 	@mkdir -p $(BUILD_DIR)

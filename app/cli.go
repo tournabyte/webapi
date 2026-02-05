@@ -1,7 +1,7 @@
-package cmd
+package app
 
 /*
- * File: cmd/cli.go
+ * File: app/cli.go
  *
  * Purpose: defining the command line interface (CLI) for the Tournabyte webapi
  *
@@ -80,6 +80,7 @@ func initAppContext(cmd *cobra.Command, args []string) error {
 		if err := initLogs(cfg.Log); err != nil {
 			return err
 		}
+		setAppOpts(cfg)
 	}
 
 	return nil
@@ -91,8 +92,10 @@ func initAppContext(cmd *cobra.Command, args []string) error {
 //   - `error`: the issue that arose from executing the serve subcommand run function (nil if execution was ok)
 func doServe(cmd *cobra.Command, args []string) error {
 
-	slog.Info("Starting serve command", slog.String("cmd", cmd.Name()), slog.Int("argc", len(args)))
-	return nil
+	slog.Info("Starting application", slog.String("cmd", cmd.Name()), slog.Any("args", args))
+	app := NewTournabyteService(GetAppOpts())
+
+	return app.Run()
 }
 
 // Function `Execute` acts of the CLI entry point for the Tournabyte API webserver

@@ -1,7 +1,7 @@
-package cmd
+package app
 
 /*
- * File: cmd/config.go
+ * File: app/config.go
  *
  * Purpose: defining the application configuration options for the Tournabyte webapi
  *
@@ -19,6 +19,27 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
+
+// Variable `appOpts` holds the unmarshalled application configuration singleton
+var appOpts *ApplicationOptions = nil
+
+// Function `setAppOpts` sets the value of the `appOpts` singleton variable for use throughout the application
+//
+// Parameters:
+//   - opts: pointer to the application options instance to use
+func setAppOpts(opts *ApplicationOptions) {
+	slog.Debug("Application options singleton set", slog.Any("opts", *opts))
+	appOpts = opts
+}
+
+// Function `GetAppOpts` retrieves the value of the `appOpts` singleton variable
+//
+// Returns:
+//   - `*ApplicationOptions`: pointer to the `appOpts` singleton
+func GetAppOpts() *ApplicationOptions {
+	slog.Debug("Application options singleton requested", slog.Any("opts", *appOpts))
+	return appOpts
+}
 
 // Type `ApplicationOptions` represents the configuration file structure using go struct syntax
 //
@@ -94,6 +115,8 @@ func initLogs(logConfig loggingOptions) error {
 	var level slog.Level
 	var outputs []io.Writer
 	var handler slog.Handler
+
+	slog.Debug("Configuring logging level", slog.String("provided", logConfig.Level))
 	switch logConfig.Level {
 	case "debug":
 		level = slog.LevelDebug
@@ -105,6 +128,7 @@ func initLogs(logConfig loggingOptions) error {
 		level = slog.LevelInfo
 	}
 
+	slog.Debug("Configuring logging destination(s)", slog.Any("provided", logConfig.Destination))
 	for _, dst := range logConfig.Destination {
 		switch dst {
 		case "std.out":
@@ -122,8 +146,10 @@ func initLogs(logConfig loggingOptions) error {
 	handlerOpts := slog.HandlerOptions{Level: level, AddSource: true}
 
 	if logConfig.UseJSON {
+		slog.Debug("Logging configured to emit JSON messages")
 		handler = slog.NewJSONHandler(io.MultiWriter(outputs...), &handlerOpts)
 	} else {
+		slog.Debug("Logging configured to emit plaintext messages")
 		handler = slog.NewTextHandler(io.MultiWriter(outputs...), &handlerOpts)
 	}
 
@@ -149,6 +175,7 @@ type AppConfig struct {
 // Returns:
 //   - `*AppConfig`: pointer to the application configuration source manager that is ready to populate
 func NewAppConfig(cfgType string, cfgName string, cfgPaths []string) *AppConfig {
+	slog.Debug("New application configuration instance: ", slog.String("type", cfgType), slog.String("name", cfgName), slog.Any("search paths", cfgPaths))
 	cfg := AppConfig{Opts: viper.New()}
 
 	cfg.Opts.SetConfigName(cfgName)
@@ -165,6 +192,7 @@ func NewAppConfig(cfgType string, cfgName string, cfgPaths []string) *AppConfig 
 // Returns:
 //   - `error`: error indicating a problem with populating the internal viper config (nil if successfully populated)
 func (cfg *AppConfig) PopulateFromFile() error {
+	slog.Debug("Populate configuration from file...")
 	return cfg.Opts.ReadInConfig()
 }
 
@@ -177,6 +205,7 @@ func (cfg *AppConfig) PopulateFromFile() error {
 // Returns:
 //   - `error`: error indicating a problem with populating the internal viper config (nil if successfully populated)
 func (cfg *AppConfig) PopulateFromFlagset(flags *pflag.FlagSet, renames map[string]string) error {
+	slog.Debug("Populating configuration from flagset...")
 	for optName, flagName := range renames {
 		err := cfg.Opts.BindPFlag(optName, flags.Lookup(flagName))
 		if err != nil {
@@ -192,8 +221,10 @@ func (cfg *AppConfig) PopulateFromFlagset(flags *pflag.FlagSet, renames map[stri
 //   - `*ApplicationOptions`: pointer to the successfully unmarshalled options structure
 //   - `error`: error indicating a failure when unmarshalling (nil if unmarshalled successfully)
 func (cfg *AppConfig) UnmarshalOptions() (*ApplicationOptions, error) {
+	slog.Debug("Unmarshalling configuration options...")
 	var options ApplicationOptions
 	if err := cfg.Opts.Unmarshal(&options); err != nil {
+		slog.Error("Could not unmarshall configuration", slog.String("reason", err.Error()))
 		return nil, err
 	}
 	return &options, nil
