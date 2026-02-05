@@ -42,6 +42,10 @@ func TestDoServe(t *testing.T) {
 	originalLogger := slog.Default()
 	defer slog.SetDefault(originalLogger)
 
+	// Save original appOpts and restore it after test
+	originalAppOpts := appOpts
+	defer func() { appOpts = originalAppOpts }()
+
 	tests := []struct {
 		name    string
 		cmd     *cobra.Command
@@ -64,6 +68,41 @@ func TestDoServe(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Set up proper configuration for testing that won't cause port binding conflicts
+			// In tests, we'll create a temporary app config with a different port
+			testConfig := NewAppConfig("json", "appconf", []string{"/nonexistent/path"})
+
+			// Save original appConfig and restore it after test
+			originalAppConfig := appConfig
+			defer func() { appConfig = originalAppConfig }()
+			appConfig = testConfig
+
+			// Mock app options with a non-conflicting port to avoid "address already in use"
+			mockOpts := &ApplicationOptions{
+				Serve: serviceOptions{
+					Port:   9999, // Use a different port to avoid conflicts
+					UseTLS: false,
+				},
+				Log: loggingOptions{
+					Level:       "info",
+					Destination: []string{"std.out"},
+					UseJSON:     false,
+				},
+				Database: databaseOptions{
+					Hosts:    []string{"localhost:27017"},
+					Username: "",
+					Password: "",
+				},
+				Filestore: filestoreOptions{
+					Endpoint:  "",
+					AccessKey: "",
+					SecretKey: "",
+				},
+			}
+
+			// Manually set appOpts to avoid nil pointer dereference
+			appOpts = mockOpts
+
 			err := doServe(tt.cmd, tt.args)
 			if tt.wantErr {
 				assert.Error(t, err)
