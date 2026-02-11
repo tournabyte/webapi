@@ -18,35 +18,25 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Function `ErrorFallback` provides a recovery middleware that delivers appropriate HTTP response status codes based on the error being recovered from
+// Function `ErrorRecovery` provides a recovery middleware that delivers appropriate HTTP response status codes based on the error being recovered from
 //
 // Returns:
 //   - `gin.HandlerFunc`: a HTTP middleware closure that is compatible with the Gin HTTP framework
-func ErrorFallback() gin.HandlerFunc {
+func ErrorRecovery() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		defer func() {
 			err := recover()
 			if err != nil {
 				switch err := err.(type) {
-				case ValidationError:
-					slog.Error("Recovering from incoming validation error")
-					ctx.JSON(http.StatusBadRequest, WriteErrorResponse(err))
-				case AuthorizationError:
-					slog.Error("Recovering from incoming authorization error")
-					if err.Reconcile {
-						ctx.JSON(http.StatusUnauthorized, WriteErrorResponse(err))
-					} else {
-						ctx.JSON(http.StatusForbidden, WriteErrorResponse(err))
-					}
-				case ServiceUnavailable:
-					slog.Error("Recovering from incoming service availability error")
-					ctx.JSON(http.StatusServiceUnavailable, WriteErrorResponse(err))
-				case ServiceTimedOut:
-					slog.Error("Recovering from a timeout exceeded error")
-					ctx.JSON(http.StatusGatewayTimeout, WriteErrorResponse(err))
+				case ErrAPIRequestFailed:
+					slog.Error("Recovering from structured API error", slog.String("err", err.Error()))
+					ctx.AbortWithStatusJSON(err.StatusCode(), RespondWithError(err.CausedBy, &err.Details))
+				case error:
+					slog.Error("Recovering from unstructured API error", slog.String("err", err.Error()))
+					ctx.AbortWithStatusJSON(http.StatusInternalServerError, RespondWithError(err, nil))
 				default:
 					slog.Error("Recovering from incoming unknown error", slog.Any("err", err))
-					ctx.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": gin.H{"message": err}})
+					ctx.AbortWithStatusJSON(http.StatusInternalServerError, RespondWithError(TryAgainLater(), nil))
 				}
 			}
 		}()

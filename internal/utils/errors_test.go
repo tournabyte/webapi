@@ -12,187 +12,88 @@ package utils
  */
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func TestValidationFailedConstructionAndJSON(t *testing.T) {
-	// Test construction
-	err := ValidationFailed("field", "name", "reason", "mandatory field")
-	assert.Equal(t, ErrValidationFailed, err.CausedBy)
-	assert.NotNil(t, err.Details)
-	assert.Equal(t, "name", err.Details["field"])
-	assert.Equal(t, "mandatory field", err.Details["reason"])
+func TestStructuredErrorCreation(t *testing.T) {
 
-	// Test JSON marshalling
-	jsonData, errMarshal := json.Marshal(&err)
-	require.NoError(t, errMarshal, "Failed to marshal ValidationFailed")
+	t.Run("ValidationFailed", func(t *testing.T) {
+		err := ValidationFailed()
+		assert.Equal(t, http.StatusBadRequest, err.StatusCode())
+	})
 
-	var result map[string]interface{}
-	errUnmarshal := json.Unmarshal(jsonData, &result)
-	require.NoError(t, errUnmarshal, "Failed to unmarshal JSON")
+	t.Run("ValidationFailedWithDetails", func(t *testing.T) {
+		err := ValidationFailed("some field", "is required", "another field", "must be a number")
+		assert.Equal(t, http.StatusBadRequest, err.StatusCode())
+		assert.Equal(t, 2, len(err.Details))
+	})
 
-	assert.Equal(t, ErrValidationFailed.Error(), result["message"])
-	assert.NotNil(t, result["details"])
-	details := result["details"].(map[string]interface{})
-	assert.Equal(t, "name", details["field"])
-	assert.Equal(t, "mandatory field", details["reason"])
-}
+	t.Run("NotAuthorized", func(t *testing.T) {
+		err := NotAuthorized()
+		assert.Equal(t, http.StatusUnauthorized, err.StatusCode())
+	})
 
-func TestNotAuthorizedConstructionAndJSON(t *testing.T) {
-	// Test construction
-	err := NotAuthorized("resource", "user_id")
-	assert.Equal(t, ErrNotAuthorized, err.CausedBy)
-	assert.NotNil(t, err.Details)
-	assert.Equal(t, "user_id", err.Details["resource"])
+	t.Run("NotAuthorizedWithDetails", func(t *testing.T) {
+		err := NotAuthorized("authorization token", "is expired")
+		assert.Equal(t, http.StatusUnauthorized, err.StatusCode())
+		assert.Equal(t, 1, len(err.Details))
+	})
 
-	// Test JSON marshalling
-	jsonData, errMarshal := json.Marshal(&err)
-	require.NoError(t, errMarshal, "Failed to marshal NotAuthorized")
+	t.Run("AccessDenied", func(t *testing.T) {
+		err := AccessDenied()
+		assert.Equal(t, http.StatusForbidden, err.StatusCode())
+	})
 
-	var result map[string]interface{}
-	errUnmarshal := json.Unmarshal(jsonData, &result)
-	require.NoError(t, errUnmarshal, "Failed to unmarshal JSON")
+	t.Run("AccessDeniedWithDetails", func(t *testing.T) {
+		err := AccessDenied("permissions", "rw", "granted", "no")
+		assert.Equal(t, http.StatusForbidden, err.StatusCode())
+		assert.Equal(t, 2, len(err.Details))
+	})
 
-	assert.Equal(t, ErrNotAuthorized.Error(), result["message"])
-	assert.NotNil(t, result["details"])
-	details := result["details"].(map[string]interface{})
-	assert.Equal(t, "user_id", details["resource"])
-}
+	t.Run("NoSuchResource", func(t *testing.T) {
+		err := ResourceNotFound()
+		assert.Equal(t, http.StatusNotFound, err.StatusCode())
+	})
 
-func TestAccessDeniedConstructionAndJSON(t *testing.T) {
-	// Test construction
-	err := AccessDenied("user", "admin", "reason", "insufficient privilege")
-	assert.Equal(t, ErrAccessDenied, err.CausedBy)
-	assert.NotNil(t, err.Details)
-	assert.Equal(t, "admin", err.Details["user"])
-	assert.Equal(t, "insufficient privilege", err.Details["reason"])
+	t.Run("NoSuchResourceWithDetails", func(t *testing.T) {
+		err := ResourceNotFound("userid", "no user with id 1")
+		assert.Equal(t, http.StatusNotFound, err.StatusCode())
+		assert.Equal(t, 1, len(err.Details))
+	})
 
-	// Test JSON marshalling
-	jsonData, errMarshal := json.Marshal(&err)
-	require.NoError(t, errMarshal, "Failed to marshal AccessDenied")
+	t.Run("TooManyRequests", func(t *testing.T) {
+		err := SlowDown()
+		assert.Equal(t, http.StatusTooManyRequests, err.StatusCode())
+	})
 
-	var result map[string]interface{}
-	errUnmarshal := json.Unmarshal(jsonData, &result)
-	require.NoError(t, errUnmarshal, "Failed to unmarshal JSON")
+	t.Run("TooManyRequestsWithDetails", func(t *testing.T) {
+		err := SlowDown("tryAgainAt", time.Now().UTC().Add(time.Hour).String())
+		assert.Equal(t, http.StatusTooManyRequests, err.StatusCode())
+		assert.Equal(t, 1, len(err.Details))
+	})
 
-	assert.Equal(t, ErrAccessDenied.Error(), result["message"])
-	assert.NotNil(t, result["details"])
-	details := result["details"].(map[string]interface{})
-	assert.Equal(t, "admin", details["user"])
-	assert.Equal(t, "insufficient privilege", details["reason"])
-}
+	t.Run("ServiceUnavailable", func(t *testing.T) {
+		err := TryAgainLater()
+		assert.Equal(t, http.StatusServiceUnavailable, err.StatusCode())
+	})
 
-func TestResourceNotFoundConstructionAndJSON(t *testing.T) {
-	// Test construction
-	err := ResourceNotFound("resource", "user_id", "reason", "not found")
-	assert.Equal(t, ErrNoSuchResource, err.CausedBy)
-	assert.NotNil(t, err.Details)
-	assert.Equal(t, "user_id", err.Details["resource"])
-	assert.Equal(t, "not found", err.Details["reason"])
+	t.Run("ServiceUnavailableWithDetails", func(t *testing.T) {
+		err := TryAgainLater("tryAgainAt", time.Now().UTC().Add(time.Hour).String())
+		assert.Equal(t, http.StatusServiceUnavailable, err.StatusCode())
+		assert.Equal(t, 1, len(err.Details))
+	})
 
-	// Test JSON marshalling
-	jsonData, errMarshal := json.Marshal(&err)
-	require.NoError(t, errMarshal, "Failed to marshal ResourceNotFound")
-
-	var result map[string]interface{}
-	errUnmarshal := json.Unmarshal(jsonData, &result)
-	require.NoError(t, errUnmarshal, "Failed to unmarshal JSON")
-
-	assert.Equal(t, ErrNoSuchResource.Error(), result["message"])
-	assert.NotNil(t, result["details"])
-	details := result["details"].(map[string]interface{})
-	assert.Equal(t, "user_id", details["resource"])
-	assert.Equal(t, "not found", details["reason"])
-}
-
-func TestSlowDownConstructionAndJSON(t *testing.T) {
-	// Test construction
-	err := SlowDown("rate", "limit", "reason", "exceeded")
-	assert.Equal(t, ErrRateLimitExceeded, err.CausedBy)
-	assert.NotNil(t, err.Details)
-	assert.Equal(t, "limit", err.Details["rate"])
-	assert.Equal(t, "exceeded", err.Details["reason"])
-
-	// Test JSON marshalling
-	jsonData, errMarshal := json.Marshal(&err)
-	require.NoError(t, errMarshal, "Failed to marshal SlowDown")
-
-	var result map[string]interface{}
-	errUnmarshal := json.Unmarshal(jsonData, &result)
-	require.NoError(t, errUnmarshal, "Failed to unmarshal JSON")
-
-	assert.Equal(t, ErrRateLimitExceeded.Error(), result["message"])
-	assert.NotNil(t, result["details"])
-	details := result["details"].(map[string]interface{})
-	assert.Equal(t, "limit", details["rate"])
-	assert.Equal(t, "exceeded", details["reason"])
-}
-
-func TestTryAgainLaterConstructionAndJSON(t *testing.T) {
-	// Test construction
-	err := TryAgainLater("service", "down")
-	assert.Equal(t, ErrServiceUnavailable, err.CausedBy)
-	assert.NotNil(t, err.Details)
-	assert.Equal(t, "down", err.Details["service"])
-
-	// Test JSON marshalling
-	jsonData, errMarshal := json.Marshal(&err)
-	require.NoError(t, errMarshal, "Failed to marshal TryAgainLater")
-
-	var result map[string]interface{}
-	errUnmarshal := json.Unmarshal(jsonData, &result)
-	require.NoError(t, errUnmarshal, "Failed to unmarshal JSON")
-
-	assert.Equal(t, ErrServiceUnavailable.Error(), result["message"])
-	assert.NotNil(t, result["details"])
-	details := result["details"].(map[string]interface{})
-	assert.Equal(t, "down", details["service"])
-}
-
-func TestErrorStatusCode(t *testing.T) {
-	// Test ValidationFailed status code
-	err := ValidationFailed()
-	statusCode := err.StatusCode()
-	assert.Equal(t, http.StatusBadRequest, statusCode)
-
-	// Test NotAuthorized status code
-	err = NotAuthorized()
-	statusCode = err.StatusCode()
-	assert.Equal(t, http.StatusUnauthorized, statusCode)
-
-	// Test AccessDenied status code
-	err = AccessDenied()
-	statusCode = err.StatusCode()
-	assert.Equal(t, http.StatusForbidden, statusCode)
-
-	// Test ResourceNotFound status code
-	err = ResourceNotFound()
-	statusCode = err.StatusCode()
-	assert.Equal(t, http.StatusNotFound, statusCode)
-
-	// Test SlowDown status code
-	err = SlowDown()
-	statusCode = err.StatusCode()
-	assert.Equal(t, http.StatusTooManyRequests, statusCode)
-
-	// Test TryAgainLater status code
-	err = TryAgainLater()
-	statusCode = err.StatusCode()
-	assert.Equal(t, http.StatusServiceUnavailable, statusCode)
-
-	// Test default case (should return 500)
-	customErr := ErrAPIRequestFailed{
-		CausedBy: errors.New("custom error"),
-		Details:  map[string]string{"type": "custom"},
-	}
-	statusCode = customErr.StatusCode()
-	assert.Equal(t, http.StatusInternalServerError, statusCode)
+	t.Run("UnstructuredError", func(t *testing.T) {
+		err := ErrAPIRequestFailed{
+			CausedBy: errors.New("custom error"),
+		}
+		assert.Equal(t, http.StatusInternalServerError, err.StatusCode())
+	})
 }
 
 func TestErrorInterface(t *testing.T) {

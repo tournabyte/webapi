@@ -12,7 +12,6 @@ package utils
  */
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"slices"
@@ -47,16 +46,6 @@ func (err ErrAPIRequestFailed) Error() string {
 // Function `(ErrAPIRequestFailed).Unwrap` implements the error interface for `ErrAPIRequestFailed`
 func (err ErrAPIRequestFailed) Unwrap() error {
 	return err.CausedBy
-}
-
-// Function `(*ErrAPIRequestFailed).MarshalJSON` implements the JSON marshaler interface for `ErrAPIRequestFailed`
-func (err *ErrAPIRequestFailed) MarshalJSON() ([]byte, error) {
-	data := make(map[string]any)
-	data["message"] = err.Error()
-	if len(err.Details) > 0 {
-		data["details"] = err.Details
-	}
-	return json.Marshal(data)
 }
 
 // Function `(*ErrAPIRequestFailed).StatusCode` retrieves the appropriate HTTP status code for the underlying error
