@@ -12,81 +12,177 @@ package utils
  */
 
 import (
-	"fmt"
-	"time"
-
-	"github.com/gin-gonic/gin"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"slices"
 )
 
-// Type `APIError` is the base error structure for the Tournabyte API responses
+// Error types associated with API failures
+var (
+	ErrValidationFailed   = errors.New("validation checks did not pass")                            // HTTP 400
+	ErrNotAuthorized      = errors.New("insufficient claim to the requested resource")              // HTTP 401
+	ErrAccessDenied       = errors.New("insufficient permissions to access the requested resource") // HTTP 403
+	ErrNoSuchResource     = errors.New("requested resource does not exist")                         // HTTP 404
+	ErrRateLimitExceeded  = errors.New("rate limit exceeded")                                       // HTTP 429
+	ErrServiceUnavailable = errors.New("try again later")                                           // HTTP 503
+)
+
+// Type `ErrAPIRequestFailed` represents an error from a Tournabyte API service provider
 //
 // Struct members:
-//   - Cause: the underlying error from the API service (expected to be an error string for seemless encoding)
-//   - Timestamp: the time the error emerged from the service
-type APIError struct {
-	Cause     error `json:"message"`
-	Timestamp int64 `json:"timestamp"`
+//   - StatusCode: the http status code to mark the response status (typically a 4xx or 5xx code)
+//   - CausedBy: contextual information about the error (the underlying error)
+//   - Details: additional information regarding the error
+type ErrAPIRequestFailed struct {
+	CausedBy error
+	Details  map[string]string
 }
 
-// Function `APIError.Error` implements the error interface for `APIError`
-func (err APIError) Error() string {
-	if err.Cause != nil {
-		return err.Cause.Error()
+// Function `(ErrAPIRequestFailed).Error` implements the error interface for `ErrAPIRequestFailed`
+func (err ErrAPIRequestFailed) Error() string {
+	return err.CausedBy.Error()
+}
+
+// Function `(ErrAPIRequestFailed).Unwrap` implements the error interface for `ErrAPIRequestFailed`
+func (err ErrAPIRequestFailed) Unwrap() error {
+	return err.CausedBy
+}
+
+// Function `(*ErrAPIRequestFailed).MarshalJSON` implements the JSON marshaler interface for `ErrAPIRequestFailed`
+func (err *ErrAPIRequestFailed) MarshalJSON() ([]byte, error) {
+	data := make(map[string]any)
+	data["message"] = err.Error()
+	if len(err.Details) > 0 {
+		data["details"] = err.Details
 	}
-	return fmt.Sprintf("Request encountered an error at %d", err.Timestamp)
+	return json.Marshal(data)
 }
 
-// Function `APIError.Unwrap` implements the error interface for `APIError`
-func (err APIError) Unwrap() error {
-	return err.Cause
-}
-
-// Type `ValidationError` represents a issue occurred during validation when processing a request
+// Function `(*ErrAPIRequestFailed).StatusCode` retrieves the appropriate HTTP status code for the underlying error
 //
-// Struct members
-//   - APIError: (inherited)
-//   - Details: mapping of issue source to issue explanation (i.e. {"some_field": "could not be parsed as a number"})
-type ValidationError struct {
-	APIError
-	Details gin.H `json:"details"`
+// Returns:
+//   - `int`: the corresponding 4xx or 5xx HTTP status code based on the underlying error
+func (err *ErrAPIRequestFailed) StatusCode() int {
+	switch {
+	case errors.Is(err.CausedBy, ErrValidationFailed):
+		return http.StatusBadRequest
+	case errors.Is(err.CausedBy, ErrNotAuthorized):
+		return http.StatusUnauthorized
+	case errors.Is(err.CausedBy, ErrAccessDenied):
+		return http.StatusForbidden
+	case errors.Is(err.CausedBy, ErrNoSuchResource):
+		return http.StatusNotFound
+	case errors.Is(err.CausedBy, ErrRateLimitExceeded):
+		return http.StatusTooManyRequests
+	case errors.Is(err.CausedBy, ErrServiceUnavailable):
+		return http.StatusServiceUnavailable
+	default:
+		return http.StatusInternalServerError
+	}
 }
 
-// Type `AuthorizationError` represents an authorization issue occurred during request processing
+// Function `ValidationFailed` constructs an ErrAPIRequestFailed corresponding to a validation failure
 //
-// Struct members:
-//   - APIError: (inherited)
-//   - Reconcile: indicates whether the issue can be reconciled (true means client should reauthenticate)
-type AuthorizationError struct {
-	APIError
-	Reconcile bool `json:"retryable"`
+// Parameters:
+//   - ...values: the sequence of string items to populate the details of the error
+//
+// Returns:
+//   - `ErrAPIRequestFailed`: the error response with the appropriate underlying issue
+func ValidationFailed(details ...string) ErrAPIRequestFailed {
+	return ErrAPIRequestFailed{
+		CausedBy: ErrValidationFailed,
+		Details:  slicePairwiseToMapping(details...),
+	}
 }
 
-// Type `NoSuchResource` represents a resource not found error during request processing
+// Function `NotAuthorized` constructs an ErrAPIRequestFailed corresponding to a authentication failure
 //
-// Struct members:
-//   - APIError: (inherited)
-//   - Resource: the resource that was requested and not found
-type NoSuchResource struct {
-	APIError
-	Resource string `json:"resource"`
+// Parameters:
+//   - ...values: the sequence of string items to populate the details of the error
+//
+// Returns:
+//   - `ErrAPIRequestFailed`: the error response with the appropriate underlying issue
+func NotAuthorized(details ...string) ErrAPIRequestFailed {
+	return ErrAPIRequestFailed{
+		CausedBy: ErrNotAuthorized,
+		Details:  slicePairwiseToMapping(details...),
+	}
 }
 
-// Type `ServiceUnavailable` represents a service availability issue encountered during request processing
+// Function `AccessDenied` constructs an ErrAPIRequestFailed corresponding to a permissions failure
 //
-// Struct members:
-//   - APIError: (inherited)
-//   - ServiceName: service that is currently unavailable
-type ServiceUnavailable struct {
-	APIError
-	ServiceName string `json:"service"`
+// Parameters:
+//   - ...values: the sequence of string items to populate the details of the error
+//
+// Returns:
+//   - `ErrAPIRequestFailed`: the error response with the appropriate underlying issue
+func AccessDenied(details ...string) ErrAPIRequestFailed {
+	return ErrAPIRequestFailed{
+		CausedBy: ErrAccessDenied,
+		Details:  slicePairwiseToMapping(details...),
+	}
 }
 
-// Type `ServiceUnavailable` represents a service timeout issue encountered during request processing
+// Function `ResourceNotFound` constructs an ErrAPIRequestFailed corresponding to a missing resource failure
 //
-// Struct members:
-//   - APIError: (inherited)
-//   - Waited: the timeout duration that was exceeded
-type ServiceTimedOut struct {
-	APIError
-	Waited time.Duration `json:"timeoutDuration"`
+// Parameters:
+//   - ...values: the sequence of string items to populate the details of the error
+//
+// Returns:
+//   - `ErrAPIRequestFailed`: the error response with the appropriate underlying issue
+func ResourceNotFound(details ...string) ErrAPIRequestFailed {
+	return ErrAPIRequestFailed{
+		CausedBy: ErrNoSuchResource,
+		Details:  slicePairwiseToMapping(details...),
+	}
+}
+
+// Function `SlowDown` constructs an ErrAPIRequestFailed corresponding to a rate limit exceeded error
+//
+// Parameters:
+//   - ...values: the sequence of string items to populate the details of the error
+//
+// Returns:
+//   - `ErrAPIRequestFailed`: the error response with the appropriate underlying issue
+func SlowDown(details ...string) ErrAPIRequestFailed {
+	return ErrAPIRequestFailed{
+		CausedBy: ErrRateLimitExceeded,
+		Details:  slicePairwiseToMapping(details...),
+	}
+}
+
+// Function `TryAgainLater` constructs an ErrAPIRequestFailed corresponding to a service availability failure
+//
+// Parameters:
+//   - ...values: the sequence of string items to populate the details of the error
+//
+// Returns:
+//   - `ErrAPIRequestFailed`: the error response with the appropriate underlying issue
+func TryAgainLater(details ...string) ErrAPIRequestFailed {
+	return ErrAPIRequestFailed{
+		CausedBy: ErrServiceUnavailable,
+		Details:  slicePairwiseToMapping(details...),
+	}
+}
+
+// Function `slicePairwiseToMapping` takes pairs of values from a slice and interprets them as key:value pairs
+//
+// Parameters:
+//   - ...values: the sequence of string items to populate the map
+//
+// Returns:
+//   - `map[string]string`: the mapping of the input slice
+func slicePairwiseToMapping(values ...string) map[string]string {
+	data := make(map[string]string)
+
+	for pair := range slices.Chunk(values, 2) {
+		if len(pair) != 2 {
+			break
+		}
+		key, value := pair[0], pair[1]
+		data[key] = value
+	}
+
+	return data
 }
