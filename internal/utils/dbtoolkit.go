@@ -402,7 +402,7 @@ func MatchCountLimit(limit int64) FindOperationOption {
 //   - `FindOperationOption`: closure to set the given `options.FindOptionsBuilder` instance's sort setting
 func SortResultsBy(sortBy ...sortKey) FindOperationOption {
 	return func(opts *options.FindOptionsBuilder) error {
-		opts.SetProjection(merge(sortBy...))
+		opts.SetSort(merge(sortBy...))
 		return nil
 	}
 }
@@ -961,6 +961,7 @@ func NewConnection(opts ...ConnectionOption) (*DatabaseConnection, error) {
 		defer cancel()
 
 		if pingErr := connect.Ping(ctx, config.ReadPreference); pingErr != nil {
+			connect.Disconnect(context.Background())
 			return nil, pingErr
 		}
 
