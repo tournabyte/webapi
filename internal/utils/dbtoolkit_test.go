@@ -29,7 +29,7 @@ func TestConnectWithDefaultSetting(t *testing.T) {
 		bson.D{{Key: "ok", Value: 1}},
 	)
 
-	conn, err := NewConnection(ConnectionDeployment(m))
+	conn, err := NewMongoConnection(ConnectionDeployment(m))
 
 	assert.NoError(t, err)
 	assert.NotNil(t, conn)
@@ -41,10 +41,10 @@ func TestConnectWithSpecifiedSetting(t *testing.T) {
 		bson.D{{Key: "ok", Value: 1}},
 	)
 
-	conn, err := NewConnection(
+	conn, err := NewMongoConnection(
 		ConnectionDeployment(m),
-		ConnectingApplicationName("dbxtestcase"),
-		ConnectionHosts("127.0.0.1"),
+		MongoAppName("dbxtestcase"),
+		MongoHosts("127.0.0.1"),
 		DirectConnection(true),
 	)
 
@@ -54,9 +54,9 @@ func TestConnectWithSpecifiedSetting(t *testing.T) {
 }
 
 func TestConnectWithInvalidSettingCombination(t *testing.T) {
-	conn, err := NewConnection(
-		ConnectingApplicationName("dbxtestcase"),
-		ConnectionHosts("127.0.0.1:27017", "127.0.0.1:27000"),
+	conn, err := NewMongoConnection(
+		MongoAppName("dbxtestcase"),
+		MongoHosts("127.0.0.1:27017", "127.0.0.1:27000"),
 		DirectConnection(true),
 	)
 
@@ -67,10 +67,10 @@ func TestConnectWithInvalidSettingCombination(t *testing.T) {
 func TestConnectWithTimedOutPing(t *testing.T) {
 	m := drivertest.NewMockDeployment()
 
-	conn, err := NewConnection(
+	conn, err := NewMongoConnection(
 		ConnectionDeployment(m),
-		ConnectingApplicationName("dbxtestcase"),
-		ConnectionHosts("127.0.0.1"),
+		MongoAppName("dbxtestcase"),
+		MongoHosts("127.0.0.1"),
 		DirectConnection(true),
 		ConnectTimeout(2*time.Second),
 	)
@@ -90,9 +90,9 @@ func TestConnectWithClientCreationFailure(t *testing.T) {
 		ClientFactory = original
 	}()
 
-	conn, err := NewConnection(
-		ConnectingApplicationName("dbxtestcase"),
-		ConnectionHosts("127.0.0.1"),
+	conn, err := NewMongoConnection(
+		MongoAppName("dbxtestcase"),
+		MongoHosts("127.0.0.1"),
 		DirectConnection(true),
 	)
 
