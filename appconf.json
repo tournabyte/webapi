@@ -20,6 +20,6 @@
       "std.out",
       "/tmp/log/tournabyte/webapi.log"
     ],
-    "json": false
+    "json": true
   }
 }
