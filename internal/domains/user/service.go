@@ -75,13 +75,13 @@ func FindUserPrimaryProfileByEmail(ctx context.Context, conn *utils.DatabaseConn
 	return cur.Decode(dst)
 }
 
-func FindUserPrimaryProfileById(ctx context.Context, idHex string, dst *PlayerProfile) error
+// func FindUserPrimaryProfileById(ctx context.Context, idHex string, dst *PlayerProfile) error
 
-func FindUserLoginByEmail(ctx context.Context, email string, dst *LoginCredentials) error
+// func FindUserLoginByEmail(ctx context.Context, email string, dst *LoginCredentials) error
 
-func UpdatePrimaryProfileDetails(ctx context.Context, newDisplayName *string, newAvatarKey *string, newBio *string) error
+// func UpdatePrimaryProfileDetails(ctx context.Context, newDisplayName *string, newAvatarKey *string, newBio *string) error
 
-func UpdatePrimaryProfilePreferences(ctx context.Context, newLanguageSetting *string, newTimezoneSetting *string) error
+// func UpdatePrimaryProfilePreferences(ctx context.Context, newLanguageSetting *string, newTimezoneSetting *string) error
 
 func secureCredentials(email string, passwd string, creds *LoginCredentials) {
 	if hash, err := argon2id.CreateHash(passwd, argon2id.DefaultParams); err != nil {

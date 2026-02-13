@@ -21,7 +21,6 @@ import (
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	"github.com/tournabyte/webapi/app"
 )
 
 // Type `MinioClientOption` is a functional setter for the MinIO client options
@@ -180,23 +179,6 @@ type MinioConnection struct {
 	options *minio.Options
 }
 
-// Function `MinioConnFromConfig` creates the MinioConnection instance reflecting the options presented in the provided application options
-//
-// Parameters:
-//   - cfg: the application configuration to extract minio options from
-//
-// Returns:
-//   - `MinioConnection`: minio client lifecycle manager on success
-//   - `error`: reported issue on failure
-func MinioConnFromConfig(cfg *app.ApplicationOptions) (*MinioConnection, error) {
-	return NewMinioConnection(
-		cfg.Filestore.Endpoint,
-		MinioStaticCredentials(cfg.Filestore.AccessKey, cfg.Filestore.SecretKey),
-		MinioUseSecureConnection(false),
-		MinioMaxRetries(3),
-	)
-}
-
 // Function `NewMinioConnection` creates the MinioConnection instance from the given endpoint and connection option setters
 //
 // Parameters:
@@ -207,7 +189,7 @@ func MinioConnFromConfig(cfg *app.ApplicationOptions) (*MinioConnection, error) 
 //   - `MinioConnection`: pointer to the minio client lifecycle manager
 //   - `error`: issue that prevented client construction (nil if construction was successful)
 func NewMinioConnection(endpoint string, opts ...MinioClientOption) (*MinioConnection, error) {
-	var cfg *minio.Options
+	cfg := &minio.Options{}
 
 	for _, opt := range opts {
 		if err := opt(cfg); err != nil {

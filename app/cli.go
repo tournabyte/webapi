@@ -15,6 +15,8 @@ import (
 	"log/slog"
 
 	"github.com/spf13/cobra"
+	"github.com/tournabyte/webapi/internal/domains/user"
+	"github.com/tournabyte/webapi/internal/utils"
 )
 
 // Variable `rootCmd` holds the root cobra command for the CLI
@@ -93,7 +95,12 @@ func initAppContext(cmd *cobra.Command, args []string) error {
 func doServe(cmd *cobra.Command, args []string) error {
 
 	slog.Info("Starting application", slog.String("cmd", cmd.Name()), slog.Any("args", args))
-	app := NewTournabyteService(GetAppOpts())
+	app, err := NewTournabyteService(GetAppOpts())
+	if err != nil {
+		return err
+	}
+
+	app.With("POST", "/v1/auth/register", utils.ErrorRecovery(), user.CreateUserHandler(app.db))
 
 	return app.Run()
 }

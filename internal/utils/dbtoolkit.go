@@ -16,7 +16,6 @@ import (
 	"crypto/tls"
 	"time"
 
-	"github.com/tournabyte/webapi/app"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -26,8 +25,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/x/mongo/driver"
 )
 
-// Type `ConnectionOption` is a functional setter for the mongo-driver client options
-type ConnectionOption func(*options.ClientOptions) error
+// Type `MongoClientOption` is a functional setter for the mongo-driver client options
+type MongoClientOption func(*options.ClientOptions) error
 
 // Type `FindOperationOption` is a functional setter for the mongo-driver find many options
 type FindOperationOption func(*options.FindOptionsBuilder) error
@@ -48,7 +47,7 @@ type DeleteOperationOption func(*options.DeleteManyOptionsBuilder) error
 // Returns:
 //   - `*options.ClientOptions`: the validated mongo-driver client options (nil if an error occurred)
 //   - `error`: the issue with connection configuration specified (nil if no validation issues are present)
-func ConnectOptsWith(opts ...ConnectionOption) (*options.ClientOptions, error) {
+func ConnectOptsWith(opts ...MongoClientOption) (*options.ClientOptions, error) {
 	config := options.Client()
 
 	for _, opt := range opts {
@@ -140,92 +139,92 @@ func DeleteOptsWith(opts ...DeleteOperationOption) (*options.DeleteManyOptionsBu
 	return config, nil
 }
 
-// Function `ConnectingApplicationName` provides a ConnectOption to set the connection's application name
+// Function `MongoAppName` provides a MongoClientOption to set the connection's application name
 // Parameters:
 //   - name: the application name to use for the connection option
 //
 // Returns:
-//   - `ConnectOption`: closure to set the given `options.ClientOptions` instance's app name setting
-func ConnectingApplicationName(name string) ConnectionOption {
+//   - `MongoClientOption`: closure to set the given `options.ClientOptions` instance's app name setting
+func MongoAppName(name string) MongoClientOption {
 	return func(opts *options.ClientOptions) error {
 		opts.SetAppName(name)
 		return nil
 	}
 }
 
-// Function `OperationTimeout` provides the ConnectOption to set the connection's timeout setting
+// Function `OperationTimeout` provides the MongoClientOption to set the connection's timeout setting
 // Parameters:
 //   - to: max time to wait for operations (only respected if operation context does not specify a deadline)
 //
 // Returns:
-//   - `ConnectOption`: closure to set the given `options.ClientOptions` instance's timeout policy
-func OperationTimeout(to time.Duration) ConnectionOption {
+//   - `MongoClientOption`: closure to set the given `options.ClientOptions` instance's timeout policy
+func OperationTimeout(to time.Duration) MongoClientOption {
 	return func(opts *options.ClientOptions) error {
 		opts.SetTimeout(to)
 		return nil
 	}
 }
 
-// Function `ConnectionHosts` provides the ConnectOption to set the connection's host lists
+// Function `MongoHosts` provides the MongoClientOption to set the connection's host lists
 // Parameters:
 //   - ...hosts: list of hosts for db servers to try for operations
 //
 // Returns:
-//   - `ConnectOption`: closure to set the given `options.ClientOptions` instance's host list
-func ConnectionHosts(hosts ...string) ConnectionOption {
+//   - `MongoClientOption`: closure to set the given `options.ClientOptions` instance's host list
+func MongoHosts(hosts ...string) MongoClientOption {
 	return func(opts *options.ClientOptions) error {
 		opts.SetHosts(hosts)
 		return nil
 	}
 }
 
-// Function `MinimumPoolSize` provides the ConnectOption to set the connection's min pool size
+// Function `MinimumPoolSize` provides the MongoClientOption to set the connection's min pool size
 // Parameters:
 //   - sz: least number of connection that can be in the connection pool at once
 //
 // Returns:
-//   - `ConnectOption`: closure to set the given `options.ClientOptions` instance's min pool size setting
-func MinimumPoolSize(sz uint64) ConnectionOption {
+//   - `MongoClientOption`: closure to set the given `options.ClientOptions` instance's min pool size setting
+func MinimumPoolSize(sz uint64) MongoClientOption {
 	return func(opts *options.ClientOptions) error {
 		opts.SetMinPoolSize(sz)
 		return nil
 	}
 }
 
-// Function `MaximumPoolSize` provides the ConnectOption to set the connection's max pool size
+// Function `MaximumPoolSize` provides the MongoClientOption to set the connection's max pool size
 // Parameters:
 //   - sz: most number of connection that can be in the connection pool at once
 //
 // Returns:
-//   - `ConnectOption`: closure to set the given `options.ClientOptions` instance's max pool size setting
-func MaximumPoolSize(sz uint64) ConnectionOption {
+//   - `MongoClientOption`: closure to set the given `options.ClientOptions` instance's max pool size setting
+func MaximumPoolSize(sz uint64) MongoClientOption {
 	return func(opts *options.ClientOptions) error {
 		opts.SetMaxPoolSize(sz)
 		return nil
 	}
 }
 
-// Function `ConnectionDeployment` provides the ConnectionOption to set the connection's internal deployment
+// Function `ConnectionDeployment` provides the MongoClientOption to set the connection's internal deployment
 // Parameters:
 //   - d: the deployment to use for the connection
 //
 // Returns:
-//   - `ConnectionOption`: closure to set the given `options.ClientOptions` instance's internal deployment setting
-func ConnectionDeployment(d driver.Deployment) ConnectionOption {
+//   - `MongoClientOption`: closure to set the given `options.ClientOptions` instance's internal deployment setting
+func ConnectionDeployment(d driver.Deployment) MongoClientOption {
 	return func(opts *options.ClientOptions) error {
 		opts.Deployment = d
 		return nil
 	}
 }
 
-// Function `ConnectionCredentials` provides the ConnectOption to set the connection's authentication details
+// Function `MongoCredentials` provides the MongoClientOption to set the connection's authentication details
 // Parameters:
 //   - username: the user to authenticate as to the db server
 //   - password: the password to authenticate with when challenged by the db server
 //
 // Returns:
-//   - `ConnectOption`: closure to set the given `options.ClientOptions` instance's credential option
-func ConnectionCredentials(username string, password string) ConnectionOption {
+//   - `MongoClientOption`: closure to set the given `options.ClientOptions` instance's credential option
+func MongoCredentials(username string, password string) MongoClientOption {
 	return func(opts *options.ClientOptions) error {
 		creds := options.Credential{
 			Username:    username,
@@ -238,117 +237,117 @@ func ConnectionCredentials(username string, password string) ConnectionOption {
 	}
 }
 
-// Function `DirectConnection` provides the ConnectOption to indicate whether the connection is direct or not
+// Function `DirectConnection` provides the MongoClientOption to indicate whether the connection is direct or not
 // Parameters:
 //   - connectDirectly: true to connect directly to a specific host
 //
 // Returns:
-//   - `ConnectOption`: closure to set the given `options.ClientOptions` instance's direct connection setting
-func DirectConnection(connectDirectly bool) ConnectionOption {
+//   - `MongoClientOption`: closure to set the given `options.ClientOptions` instance's direct connection setting
+func DirectConnection(connectDirectly bool) MongoClientOption {
 	return func(opts *options.ClientOptions) error {
 		opts.SetDirect(connectDirectly)
 		return nil
 	}
 }
 
-// Function `ConnectTimeout` provides the ConnectOption to set the connection's timeout policy
+// Function `ConnectTimeout` provides the MongoClientOption to set the connection's timeout policy
 // Parameters:
 //   - to: the duration to wait before timing out connection attempts
 //
 // Returns:
-//   - `ConnectOption`: closure to set the given `options.ClientOptions` instance's timeout
-func ConnectTimeout(to time.Duration) ConnectionOption {
+//   - `MongoClientOption`: closure to set the given `options.ClientOptions` instance's timeout
+func ConnectTimeout(to time.Duration) MongoClientOption {
 	return func(opts *options.ClientOptions) error {
 		opts.SetConnectTimeout(to)
 		return nil
 	}
 }
 
-// Function `HeartbeatInterval` provides the ConnectOption to set the connection's heartbeat interval
+// Function `HeartbeatInterval` provides the MongoClientOption to set the connection's heartbeat interval
 // Parameters:
 //   - hbInterval: the duration to use between hearbeat health checks
 //
 // Returns:
-//   - `ConnectOption`: closure to set the given `options.ClientOptions` instance's heartbeat interval
-func HeartbeatInterval(hbInterval time.Duration) ConnectionOption {
+//   - `MongoClientOption`: closure to set the given `options.ClientOptions` instance's heartbeat interval
+func HeartbeatInterval(hbInterval time.Duration) MongoClientOption {
 	return func(opts *options.ClientOptions) error {
 		opts.SetHeartbeatInterval(hbInterval)
 		return nil
 	}
 }
 
-// Function `ConnectionReadConcern` provides the ConnectOption to set the connection's read concern level
+// Function `MongoReadConcern` provides the MongoClientOption to set the connection's read concern level
 // Parameters:
 //   - rc: pointer to the read concern level to follow
 //
 // Returns:
-//   - `ConnectOption`: closure to set the given `options.ClientOptions` instance's app read concern level
-func ConnectionReadConcern(rc *readconcern.ReadConcern) ConnectionOption {
+//   - `MongoClientOption`: closure to set the given `options.ClientOptions` instance's app read concern level
+func MongoReadConcern(rc *readconcern.ReadConcern) MongoClientOption {
 	return func(opts *options.ClientOptions) error {
 		opts.SetReadConcern(rc)
 		return nil
 	}
 }
 
-// Function `ConnectionReadPreference` provides the ConnectOption to set the connection's read prefrences
+// Function `MongoReadPreference` provides the MongoClientOption to set the connection's read prefrences
 // Parameters:
 //   - rp: pointer to the read preferences to follow
 //
 // Returns:
-//   - `ConnectOption`: closure to set the given `options.ClientOptions` instance's read preference
-func ConnectionReadPreference(rp *readpref.ReadPref) ConnectionOption {
+//   - `MongoClientOption`: closure to set the given `options.ClientOptions` instance's read preference
+func MongoReadPreference(rp *readpref.ReadPref) MongoClientOption {
 	return func(opts *options.ClientOptions) error {
 		opts.SetReadPreference(rp)
 		return nil
 	}
 }
 
-// Function `ConnectionWriteConcern` provides the ConnectOption to set the connection's write concern level
+// Function `MongoWriteConcern` provides the MongoClientOption to set the connection's write concern level
 // Parameters:
 //   - wc: pointer to the write concern level to follow
 //
 // Returns:
-//   - `ConnectOption`: closure to set the given `options.ClientOptions` instance's write concern level
-func ConnectionWriteConcern(wc *writeconcern.WriteConcern) ConnectionOption {
+//   - `MongoClientOption`: closure to set the given `options.ClientOptions` instance's write concern level
+func MongoWriteConcern(wc *writeconcern.WriteConcern) MongoClientOption {
 	return func(opts *options.ClientOptions) error {
 		opts.SetWriteConcern(wc)
 		return nil
 	}
 }
 
-// Function `ConnectionReadRetryPolicy` provides the ConnectOption to set the connection's retry policy for reads
+// Function `MongoReadRetryPolicy` provides the MongoClientOption to set the connection's retry policy for reads
 // Parameters:
 //   - retry: true to indicate reads should be retried
 //
 // Returns:
-//   - `ConnectOption`: closure to set the given `options.ClientOptions` instance's read retry policy
-func ConnectionReadRetryPolicy(retry bool) ConnectionOption {
+//   - `MongoClientOption`: closure to set the given `options.ClientOptions` instance's read retry policy
+func MongoReadRetryPolicy(retry bool) MongoClientOption {
 	return func(opts *options.ClientOptions) error {
 		opts.SetRetryReads(retry)
 		return nil
 	}
 }
 
-// Function `ConnectionWriteRetryPolicy` provides the ConnectOption to set the connection's retry policy for writes
+// Function `MongoWriteRetryPolicy` provides the MongoClientOption to set the connection's retry policy for writes
 // Parameters:
 //   - retry: true to indicate writes should be retried
 //
 // Returns:
-//   - `ConnectOption`: closure to set the given `options.ClientOptions` instance's write rety policy
-func ConnectionWriteRetryPolicy(retry bool) ConnectionOption {
+//   - `MongoClientOption`: closure to set the given `options.ClientOptions` instance's write rety policy
+func MongoWriteRetryPolicy(retry bool) MongoClientOption {
 	return func(opts *options.ClientOptions) error {
 		opts.SetRetryWrites(retry)
 		return nil
 	}
 }
 
-// Function `ConnectionTLSConfig` provides the ConnectOption to set the connection's TLS configuration
+// Function `MongoTLSConfig` provides the MongoClientOption to set the connection's TLS configuration
 // Parameters:
 //   - tls: the TLS configuration to use
 //
 // Returns:
-//   - `ConnectOption`: closure to set the given `options.ClientOptions` instance's TLS setting
-func ConnectionTLSConfig(tls *tls.Config) ConnectionOption {
+//   - `MongoClientOption`: closure to set the given `options.ClientOptions` instance's TLS setting
+func MongoTLSConfig(tls *tls.Config) MongoClientOption {
 	return func(opts *options.ClientOptions) error {
 		opts.SetTLSConfig(tls)
 		return nil
@@ -915,29 +914,14 @@ type DatabaseConnection struct {
 	options *options.ClientOptions
 }
 
-// Function `ConnectionFromConfig` creates the connection configured by the given application configuration
-// Parameters:
-//   - cfg: the configuration options to use
-//
-// Returns:
-//   - `DatabaseConnection` the resulting establish mongodb connection with client and configuration information available
-//   - `error`: the issue that occurred when attempting to create the specified connection (nil if no issue occurred)
-func ConnectionFromConfig(cfg *app.ApplicationOptions) (*DatabaseConnection, error) {
-	return NewConnection(
-		ConnectingApplicationName("Tournabyte API"),
-		ConnectionCredentials(cfg.Database.Username, cfg.Database.Password),
-		ConnectionHosts(cfg.Database.Hosts...),
-	)
-}
-
-// Function `NewConnection` creates the connection configured as specified by the `options` member and confirms the connection can be established
+// Function `NewMongoConnection` creates the connection configured as specified by the `options` member and confirms the connection can be established
 // Parameters:
 //   - ...opts: variadic sequence of options to specify how the connection should be configured
 //
 // Returns:
 //   - `DatabaseConnection`: the resulting established mongodb connection with client and configuration information available for lifecycle management
 //   - `error`: the issue that occurred when attempting to create the specified connection (nil if no issue occurred)
-func NewConnection(opts ...ConnectionOption) (*DatabaseConnection, error) {
+func NewMongoConnection(opts ...MongoClientOption) (*DatabaseConnection, error) {
 	var conn DatabaseConnection
 	var connectTimeout time.Duration
 

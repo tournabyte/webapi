@@ -15,11 +15,10 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
-	"github.com/tournabyte/webapi/app"
 	"github.com/tournabyte/webapi/internal/utils"
 )
 
-func CreateUserHandler(conn *utils.DatabaseConnection, cfg *app.ApplicationOptions) gin.HandlerFunc {
+func CreateUserHandler(conn *utils.DatabaseConnection) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		var body NewUser
 		var newUserID string
