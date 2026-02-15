@@ -1,6 +1,6 @@
 # Tournabyte Data Infrastructure
 
-The tournabyte platform utilizes MongoDB and MinIO for storing data. The MongoDB instance provides the document database the API service uses to record and modify data records. The MinIO instance provides an S3 compatible API for retrieving and storing binary object. These services are containerized for local development and as a stepping stone to maintain cloud-native status per the project goals
+The tournabyte platform utilizes MongoDB and MinIO for storing data. The MongoDB instance provides the document database the API service uses to record and modify data records. The MinIO instance provides an S3 compatible API for retrieving and storing binary objects. These services are containerized for local development and as a stepping stone to maintain cloud-native status per the project goals.
 
 ## Services
 
@@ -8,9 +8,9 @@ The services offered within the data infrastructure are specified in the `compos
 
 ### Prerequisites
 
-To run the data infrastructure for the Tournabyte platform the following requirements must be met
+To run the data infrastructure for the Tournabyte platform the following requirements must be met.
 
-- Install docker (both container engine compose tool set)
+- Install docker (both container engine and compose tool set)
 - Configure the setup secrets (see the configuration section below)
 
 ### Starting the services
@@ -40,7 +40,7 @@ $ docker compose stop
 
 ### Secrets
 
-The `init/` subdirectory contains a simple tool for initializes data infrastructure secrets. Use the tool from the directory containing this file. Invoke it as follows:
+The `init/` subdirectory contains a simple tool that helps initialize data infrastructure secrets. Use the tool from the directory containing this file. Invoke it as follows:
 
 ```bash
 $ ./init/secret.py --help
@@ -64,7 +64,7 @@ options:
   - DBROOT_USERNAME: the root user for the mongoDB instance
   - DBROOT_PASSWORD: the root password for the mongoDB instance
   - S3ROOT_USERNAME: the root user for the minIO instance
-  - S3ROOT_PASSWORD: the root password for the minIO isntance
+  - S3ROOT_PASSWORD: the root password for the minIO instance 
 - The secrets are not checked into version control for security reasons
 
 ### Files

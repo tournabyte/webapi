@@ -53,13 +53,13 @@ def write_secret_to_file(env_dir: Path, key: str, value: str) -> None:
             value [str]: the secret to store
     """
     env_file = env_dir / f"{key}.txt"
-    with open(env_file, "a") as f:
+    with open(env_file, os.O_CREAT | os.O_WRONLY) as f:
         f.write(f"{value}")
 
 
 def main():
     """
-        Entry point for the infrastructure secret initalizer
+        Entry point for the infrastructure secret initializer
 
         Arguments:
             key [str]: the secret name to initialize (required)
@@ -77,6 +77,10 @@ def main():
             secret source not specified
             too many sources specified
     """
+    if sys.version_info.major != 3 or sys.version_info.minor < 14:
+        print('Only support for python 3.14 or later')
+        sys.exit(1)
+
     parser = argparse.ArgumentParser(
         description="Initialize secrets for the infrastructure's environment",
     )
@@ -113,7 +117,6 @@ def main():
         value = read_secret_as_value()
     elif args.generate:
         value = generate_random_secret(args.length)
-        print(f"Generated random secret: {value}")
     else:
         print("Error: Must specify secret source using --value or --generate")
         sys.exit(1)
