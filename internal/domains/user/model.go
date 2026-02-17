@@ -28,11 +28,11 @@ import (
 //   - UpdatedAt: the timestamp the account was updated at
 type FullAccountDetails struct {
 	ID             bson.ObjectID    `bson:"_id"`
-	Credentials    LoginCredentials `bson:"login_credentials" validate:"required,dive"`
-	PrimaryProfile PlayerProfile    `bson:"primary_profile" validate:"required,dive"`
+	Credentials    LoginCredentials `bson:"login_credentials"`
+	PrimaryProfile PlayerProfile    `bson:"primary_profile"`
 	Sessions       []ActiveSession  `bson:"active_sessions"`
-	CreatedAt      time.Time        `bson:"created_at" validate:"required,datetime"`
-	UpdatedAt      time.Time        `bson:"updated_at" validate:"required,datetime"`
+	CreatedAt      time.Time        `bson:"created_at"`
+	UpdatedAt      time.Time        `bson:"updated_at"`
 }
 
 // Type `LoginCredentials` stores the unique email and passphrase for an account
@@ -41,8 +41,8 @@ type FullAccountDetails struct {
 //   - Email: the user login of an account
 //   - PasswordHash: the hashed password the user authenticates with
 type LoginCredentials struct {
-	Email        string `bson:"email" validate:"required,email"`
-	PasswordHash string `bson:"password_hash" validate:"required"`
+	Email        string `bson:"email"`
+	PasswordHash string `bson:"password_hash"`
 }
 
 // Type `ActiveSession` stores the refresh token information needed to reauthenticate without user intervention
@@ -63,8 +63,8 @@ type ActiveSession struct {
 //   - Language: the language code specifying the language localization for this account
 //   - Timezone: the timezone code specifying the time localization for this account
 type ProfileSettings struct {
-	Language string `bson:"language" validate:"bcp47_language_tag"`
-	Timezone string `bson:"timezone" validate:"timezone"`
+	Language string `bson:"language"`
+	Timezone string `bson:"timezone"`
 }
 
 // Type `DefaultProfile` stores the default profile information used to create a profile when joining an organization or event
@@ -74,14 +74,14 @@ type ProfileSettings struct {
 //   - AvatarObjectKey: the object key for the default avatar used throughoout the user interfaces for an account
 //   - Bio: the default bio string used throughout the user interfaces for an account
 type PlayerProfile struct {
-	ID              string          `bson:"_id,omitempty" validate:"mongodb"`
-	DisplayName     string          `bson:"display_name" validate:"required,alphanumericspace"`
-	AvatarObjectKey string          `bson:"avatar_key" validate:"dirpath"`
+	ID              string          `bson:"_id"`
+	DisplayName     string          `bson:"display_name"`
+	AvatarObjectKey string          `bson:"avatar_key"`
 	Bio             string          `bson:"bio"`
-	Preferences     ProfileSettings `bson:"preferences" validate:"dive"`
-	CreatedAt       time.Time       `bson:"created_at" validate:"required,datetime"`
-	UpdatedAt       time.Time       `bson:"updated_at" validate:"required,datetime"`
-	ClaimedBy       string          `bson:"claimed_by,omitempty" validate:"mongodb"`
+	Preferences     ProfileSettings `bson:"preferences"`
+	CreatedAt       time.Time       `bson:"created_at"`
+	UpdatedAt       time.Time       `bson:"updated_at"`
+	ClaimedBy       string          `bson:"claimed_by,omitempty"`
 }
 
 // Type `NewUserRequest` represents the minimum details required to create a user account
@@ -91,9 +91,9 @@ type PlayerProfile struct {
 //   - Password: the password of the new user (to be cryptographically secured before storing)
 //   - DisplayName: the public display name of the new user
 type NewUserRequest struct {
-	Email       string `json:"email" validate:"required,email"`
-	Password    string `json:"password" validate:"required"`
-	DisplayName string `json:"displayName" validate:"required,alphanumericspace"`
+	Email       string `json:"email" binding:"required,email"`
+	Password    string `json:"password" binding:"required,min=8"`
+	DisplayName string `json:"displayName" binding:"required,alphanum,min=4"`
 }
 
 // Type `NewUserResponse` represents the response structure for newly created user accounts
