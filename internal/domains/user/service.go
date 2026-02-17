@@ -38,7 +38,7 @@ func CreateUserRecord(ctx context.Context, conn *mongo.Client, userDetails *NewU
 	var primaryProfile PlayerProfile
 	var loginDetails LoginCredentials
 
-	account.ID = bson.NewObjectID().Hex()
+	account.ID = bson.NewObjectID()
 	secureCredentials(userDetails.Email, userDetails.Password, &loginDetails)
 	basicProfile(userDetails.DisplayName, &primaryProfile)
 	account.Credentials = loginDetails

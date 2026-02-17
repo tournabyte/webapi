@@ -11,7 +11,11 @@ package user
  *
  */
 
-import "time"
+import (
+	"time"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
+)
 
 // Type `FullAccountDetails` represents the full account details of an authorized user on the Tournabyte platform
 //
@@ -23,7 +27,7 @@ import "time"
 //   - CreatedAt: the timestamp the account was created at
 //   - UpdatedAt: the timestamp the account was updated at
 type FullAccountDetails struct {
-	ID             string           `bson:"_id" validate:"required,mongodb"`
+	ID             bson.ObjectID    `bson:"_id"`
 	Credentials    LoginCredentials `bson:"login_credentials" validate:"required,dive"`
 	PrimaryProfile PlayerProfile    `bson:"primary_profile" validate:"required,dive"`
 	Sessions       []ActiveSession  `bson:"active_sessions"`

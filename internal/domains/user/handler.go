@@ -12,7 +12,6 @@ package user
  */
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
 	"reflect"
@@ -42,17 +41,8 @@ func CreateUserHandler(conn *utils.DatabaseConnection) gin.HandlerFunc {
 			panic(utils.TryAgainLater("database", "failed to start session"))
 		} else {
 			defer sess.EndSession(ctx.Request.Context())
-			_, transactionErr := sess.WithTransaction(
-				ctx.Request.Context(),
-				func(ctx context.Context) (any, error) {
-					if err := CreateUserRecord(ctx, sess.Client(), &body, &newUserID); err != nil {
-						return nil, err
-					}
-					return nil, nil
-				},
-			)
-			if transactionErr != nil {
-				panic(utils.TryAgainLater("recordCreationFailed", transactionErr.Error()))
+			if err := CreateUserRecord(ctx, sess.Client(), &body, &newUserID); err != nil {
+				panic(utils.TryAgainLater("accountCreationFailed", err.Error()))
 			} else {
 				ctx.JSON(
 					http.StatusCreated,
