@@ -22,7 +22,17 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
-func CreateUserRecord(ctx context.Context, conn *mongo.Client, userDetails *NewUser, dst *string) error {
+// Function `CreateUserRecord` creates a new user record using the provided database connection and initial user details
+//
+// Parameters:
+//   - ctx: the context controlling the lifetime of the user creation operation
+//   - conn: the mongodb driver client to execute the user creation operation on
+//   - userDetails: the initial user details to include in the newly created user record
+//   - inserted: the location to write the newly created user ID to
+//
+// Returns:
+//   - `error`: issue that occurred during the user creation operation (nil if no issue occurred)
+func CreateUserRecord(ctx context.Context, conn *mongo.Client, userDetails *NewUser, inserted *string) error {
 	slog.Info("Creating new user record")
 	var account FullAccountDetails
 	var primaryProfile PlayerProfile
@@ -48,10 +58,20 @@ func CreateUserRecord(ctx context.Context, conn *mongo.Client, userDetails *NewU
 		return err
 	}
 
-	*dst = res.InsertedID.(bson.ObjectID).Hex()
+	*inserted = res.InsertedID.(bson.ObjectID).Hex() // Panics if ID is not ObjectID (to be handled by HTTP handler)
 	return nil
 }
 
+// Function `FindUserPrimaryProfileByEmail` retrieves the primary profile of the user identified by the given email
+//
+// Parameters:
+//   - ctx: the context controlling the lifetime of the profile lookup operation
+//   - conn: the mongodb driver client to execute this profile lookup operation on
+//   - email: the email that identifies the profile being looked up
+//   - dst: location to write the profile details to
+//
+// Returns:
+//   - `error`: issue that occurred during the profile lookup operation (nil is no issue occurred)
 func FindUserPrimaryProfileByEmail(ctx context.Context, conn *utils.DatabaseConnection, email string, dst *PlayerProfile) error {
 	cfg, err := utils.FindOptsWith(utils.ProjectionSpecification(utils.Retain(`primary_profile`)))
 	if err != nil {

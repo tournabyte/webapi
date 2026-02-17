@@ -28,7 +28,7 @@ type FullAccountDetails struct {
 	PrimaryProfile PlayerProfile    `bson:"primary_profile" validate:"required,dive"`
 	Sessions       []ActiveSession  `bson:"active_sessions"`
 	CreatedAt      time.Time        `bson:"created_at" validate:"required,datetime"`
-	UpdatedAt      time.Time        `bson:"created_at" validate:"required,datetime"`
+	UpdatedAt      time.Time        `bson:"updated_at" validate:"required,datetime"`
 }
 
 // Type `LoginCredentials` stores the unique email and passphrase for an account
@@ -76,7 +76,7 @@ type PlayerProfile struct {
 	Bio             string          `bson:"bio"`
 	Preferences     ProfileSettings `bson:"preferences" validate:"dive"`
 	CreatedAt       time.Time       `bson:"created_at" validate:"required,datetime"`
-	UpdatedAt       time.Time       `bson:"created_at" validate:"required,datetime"`
+	UpdatedAt       time.Time       `bson:"updated_at" validate:"required,datetime"`
 	ClaimedBy       string          `bson:"claimed_by,omitempty" validate:"mongodb"`
 }
 
