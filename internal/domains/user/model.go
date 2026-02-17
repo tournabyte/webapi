@@ -84,14 +84,22 @@ type PlayerProfile struct {
 	ClaimedBy       string          `bson:"claimed_by,omitempty" validate:"mongodb"`
 }
 
-// Type `NewUser` represents the minimum details required to create a user account
+// Type `NewUserRequest` represents the minimum details required to create a user account
 //
 // Fields:
 //   - Email: the email of the new user
 //   - Password: the password of the new user (to be cryptographically secured before storing)
 //   - DisplayName: the public display name of the new user
-type NewUser struct {
+type NewUserRequest struct {
 	Email       string `json:"email" validate:"required,email"`
 	Password    string `json:"password" validate:"required"`
 	DisplayName string `json:"displayName" validate:"required,alphanumericspace"`
+}
+
+// Type `NewUserResponse` represents the response structure for newly created user accounts
+//
+// Fields:
+//   - ID: the new user ID
+type NewUserResponse struct {
+	ID string `json:"id"`
 }

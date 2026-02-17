@@ -29,8 +29,8 @@ import (
 //   - `gin.HandlerFunc`: closure capable of handling HTTP requests through integration with the HTTP gin framework
 func CreateUserHandler(conn *utils.DatabaseConnection) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		var body NewUser
-		var newUserID string
+		var body NewUserRequest
+		var newUser NewUserResponse
 
 		if err := ctx.ShouldBindJSON(&body); err != nil {
 			slog.Error("Could not bind request body", slog.Any("expectedStructure", reflect.TypeOf(body)))
@@ -41,12 +41,12 @@ func CreateUserHandler(conn *utils.DatabaseConnection) gin.HandlerFunc {
 			panic(utils.TryAgainLater("database", "failed to start session"))
 		} else {
 			defer sess.EndSession(ctx.Request.Context())
-			if err := CreateUserRecord(ctx, sess.Client(), &body, &newUserID); err != nil {
+			if err := CreateUserRecord(ctx, sess.Client(), &body, &newUser); err != nil {
 				panic(utils.TryAgainLater("accountCreationFailed", err.Error()))
 			} else {
 				ctx.JSON(
 					http.StatusCreated,
-					utils.RespondWithRequestedData(gin.H{"id": newUserID}),
+					utils.RespondWithRequestedData(newUser),
 				)
 			}
 		}

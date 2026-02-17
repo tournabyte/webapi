@@ -13,7 +13,9 @@ package user
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/alexedwards/argon2id"
@@ -32,7 +34,7 @@ import (
 //
 // Returns:
 //   - `error`: issue that occurred during the user creation operation (nil if no issue occurred)
-func CreateUserRecord(ctx context.Context, conn *mongo.Client, userDetails *NewUser, inserted *string) error {
+func CreateUserRecord(ctx context.Context, conn *mongo.Client, userDetails *NewUserRequest, inserted *NewUserResponse) error {
 	slog.Info("Creating new user record")
 	var account FullAccountDetails
 	var primaryProfile PlayerProfile
@@ -58,7 +60,16 @@ func CreateUserRecord(ctx context.Context, conn *mongo.Client, userDetails *NewU
 		return err
 	}
 
-	*inserted = res.InsertedID.(bson.ObjectID).Hex() // Panics if ID is not ObjectID (to be handled by HTTP handler)
+	if id, ok := res.InsertedID.(bson.ObjectID); ok {
+		inserted.ID = id.Hex()
+		return nil
+	}
+
+	id := fmt.Sprint(res.InsertedID)
+	id = strings.TrimPrefix(id, `ObjectID("`)
+	id = strings.TrimSuffix(id, `")`)
+	inserted.ID = id
+
 	return nil
 }
 
