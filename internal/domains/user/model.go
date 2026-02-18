@@ -74,14 +74,13 @@ type ProfileSettings struct {
 //   - AvatarObjectKey: the object key for the default avatar used throughoout the user interfaces for an account
 //   - Bio: the default bio string used throughout the user interfaces for an account
 type PlayerProfile struct {
-	ID              string          `bson:"_id"`
 	DisplayName     string          `bson:"display_name"`
 	AvatarObjectKey string          `bson:"avatar_key"`
 	Bio             string          `bson:"bio"`
 	Preferences     ProfileSettings `bson:"preferences"`
 	CreatedAt       time.Time       `bson:"created_at"`
 	UpdatedAt       time.Time       `bson:"updated_at"`
-	ClaimedBy       string          `bson:"claimed_by,omitempty"`
+	ClaimedBy       bson.ObjectID   `bson:"claimed_by,omitempty"`
 }
 
 // Type `NewUserRequest` represents the minimum details required to create a user account
@@ -96,10 +95,24 @@ type NewUserRequest struct {
 	DisplayName string `json:"displayName" binding:"required,alphanum,min=4"`
 }
 
-// Type `NewUserResponse` represents the response structure for newly created user accounts
+// Type `LoginAttempt` represents the details needed to complete an authentication challenge
+//
+// Fields:
+//   - AuthenticateAs: the email identifier to initiate the authentication challenge as
+//   - Passphrase: the reponse to the authentication challenge
+type LoginAttempt struct {
+	AuthenticateAs string `json:"authenticateAs" binding:"required"`
+	Passphrase     string `json:"passphrase" binding:"required"`
+}
+
+// Type `AuthenticatedUser` represents the response structure for successfully authenticating as a user
 //
 // Fields:
 //   - ID: the new user ID
-type NewUserResponse struct {
-	ID string `json:"id"`
+type AuthenticatedUser struct {
+	ID           string `json:"id"`
+	Email        string `json:"email"`
+	DisplayName  string `json:"displayName"`
+	AccessToken  string `json:"accessToken"`
+	RefreshToken string `json:"refreshToken"`
 }

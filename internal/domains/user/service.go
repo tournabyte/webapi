@@ -13,12 +13,15 @@ package user
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/alexedwards/argon2id"
+	"github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/tournabyte/webapi/internal/utils"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -34,13 +37,14 @@ import (
 //
 // Returns:
 //   - `error`: issue that occurred during the user creation operation (nil if no issue occurred)
-func CreateUserRecord(ctx context.Context, conn *mongo.Client, userDetails *NewUserRequest, inserted *NewUserResponse) error {
+func CreateUserRecord(ctx context.Context, conn *mongo.Client, userDetails *NewUserRequest, inserted *AuthenticatedUser) error {
 	slog.Info("Creating new user record")
 	var account FullAccountDetails
 	var primaryProfile PlayerProfile
 	var loginDetails LoginCredentials
 
 	account.ID = bson.NewObjectID()
+	account.Sessions = make([]ActiveSession, 0)
 	secureCredentials(userDetails.Email, userDetails.Password, &loginDetails)
 	basicProfile(userDetails.DisplayName, &primaryProfile)
 	account.Credentials = loginDetails
@@ -71,6 +75,72 @@ func CreateUserRecord(ctx context.Context, conn *mongo.Client, userDetails *NewU
 	inserted.ID = id
 
 	return nil
+}
+
+// Function `ValidateLoginCredentials` validates the provides credentials to authenticate the specified user
+//
+// Parameters:
+//   - ctx: the context controlling the lifetime of the credential check
+//   - conn: the mongodb driver client to execute this credential check on
+//   - tokenSigner: the JWT signing tool
+//   - attempt: the authentication challenge response to verify
+//   - user: the location to write authenticated details to
+func ValidateLoginCredentials(ctx context.Context, conn *mongo.Client, tokenSigner jose.Signer, attempt *LoginAttempt, user *AuthenticatedUser) error {
+	slog.Info("Performing authentication challenge")
+	var account FullAccountDetails
+
+	err := conn.
+		Database(`tournabyte`).
+		Collection(`users`).
+		FindOne(
+			ctx,
+			bson.D{{Key: "login_credentials.email", Value: attempt.AuthenticateAs}},
+		).
+		Decode(account)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return utils.ResourceNotFound()
+		}
+		return err
+	}
+
+	if match, err := argon2id.ComparePasswordAndHash(attempt.Passphrase, account.Credentials.PasswordHash); err != nil {
+		return utils.TryAgainLater()
+	} else if !match {
+		return utils.NotAuthorized()
+	} else {
+		user.ID = account.ID.Hex()
+		user.Email = account.Credentials.Email
+		user.DisplayName = account.PrimaryProfile.DisplayName
+		if err := makeSession(user, tokenSigner); err != nil {
+			return err
+		}
+		var refresh ActiveSession
+		refresh.NotValidBefore = time.Now().UTC()
+		refresh.NotValidAfter = refresh.NotValidBefore.Add(72 * time.Hour)
+		if refreshHash, err := argon2id.CreateHash(user.RefreshToken, argon2id.DefaultParams); err != nil {
+			return err
+		} else {
+			refresh.TokenHash = refreshHash
+		}
+
+		res, err := conn.
+			Database(`tournabyte`).
+			Collection(`users`).
+			UpdateByID(
+				ctx,
+				account.ID,
+				bson.M{"$push": bson.M{"active_sessions": refresh}},
+			)
+		if err != nil {
+			return err
+		} else if res.ModifiedCount != 1 {
+			return utils.TryAgainLater()
+		} else {
+			return nil
+		}
+	}
 }
 
 // Function `FindUserPrimaryProfileByEmail` retrieves the primary profile of the user identified by the given email
@@ -114,12 +184,13 @@ func FindUserPrimaryProfileByEmail(ctx context.Context, conn *utils.DatabaseConn
 
 // func UpdatePrimaryProfilePreferences(ctx context.Context, newLanguageSetting *string, newTimezoneSetting *string) error
 
-func secureCredentials(email string, passwd string, creds *LoginCredentials) {
+func secureCredentials(email string, passwd string, creds *LoginCredentials) error {
 	if hash, err := argon2id.CreateHash(passwd, argon2id.DefaultParams); err != nil {
-		panic(err)
+		return err
 	} else {
 		creds.Email = email
 		creds.PasswordHash = hash
+		return nil
 	}
 }
 
@@ -128,4 +199,22 @@ func basicProfile(displayName string, profile *PlayerProfile) {
 	profile.Preferences = ProfileSettings{Language: "en", Timezone: time.UTC.String()}
 	profile.CreatedAt = time.Now().UTC()
 	profile.UpdatedAt = time.Now().UTC()
+}
+
+func makeSession(user *AuthenticatedUser, signer jose.Signer) error {
+	cl := jwt.Claims{
+		Issuer:   "example.com",
+		Audience: jwt.Audience{"example-audience"},
+		Expiry:   jwt.NewNumericDate(time.Now().Add(10 * time.Minute)),
+		IssuedAt: jwt.NewNumericDate(time.Now()),
+		ID:       user.ID,
+	}
+
+	if raw, err := jwt.Signed(signer).Claims(cl).Serialize(); err != nil {
+		return err
+	} else {
+		user.AccessToken = raw
+		user.RefreshToken = rand.Text()
+		return nil
+	}
 }
