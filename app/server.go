@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tournabyte/webapi/internal/domains/user"
 	"github.com/tournabyte/webapi/internal/utils"
 )
 
@@ -103,22 +104,27 @@ func NewTournabyteService(options *ApplicationOptions) (*TournabyteAPIService, e
 
 }
 
-// Function `(*TournabyteAPIService).With` setups the handler chain to respond to requests on the given HTTP method and path
+// Function `(*TournabyteAPIService).addAuthGroup` setups the handler chains to respond to requests on the `/auth/` endpoint group
 //
 // Parameters:
-//   - method: the HTTP method allowed
-//   - path: the path to listen for requests on
-//   - ...handlers: the handler chain for responding to incoming requests
-//
-// Returns:
-//   - `*TournabyteAPIService`: self (useful for chain building the handlers)
-func (srv *TournabyteAPIService) With(method string, path string, handlers ...gin.HandlerFunc) *TournabyteAPIService {
-	srv.router.Handle(
-		method,
-		path,
-		handlers...,
-	)
-	return srv
+//   - parentGroup: the router group to attach to
+func (srv *TournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
+	auth := parentGroup.Group("auth")
+
+	// POST /auth/register
+	auth.POST("register", user.CreateUserHandler(srv.db))
+}
+
+// Function `(*TournabyteAPIService).RegisterRoutes` initializes the underlying engine with the appropriate routes for service
+func (srv *TournabyteAPIService) RegisterRoutes() {
+	srv.router.Use(utils.ErrorRecovery())
+
+	{
+		// /v1/...
+		v1 := srv.router.Group("v1")
+		srv.addAuthGroup(v1)
+	}
+
 }
 
 // Function `(*TournabyteAPIService).Run` starts the server instance in a separate goroutine and enables graceful shutdowns of the system

@@ -15,8 +15,6 @@ import (
 	"log/slog"
 
 	"github.com/spf13/cobra"
-	"github.com/tournabyte/webapi/internal/domains/user"
-	"github.com/tournabyte/webapi/internal/utils"
 )
 
 // Variable `rootCmd` holds the root cobra command for the CLI
@@ -100,8 +98,7 @@ func doServe(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	app.With("POST", "/v1/auth/register", utils.ErrorRecovery(), user.CreateUserHandler(app.db))
-
+	app.RegisterRoutes()
 	return app.Run()
 }
 
@@ -110,6 +107,7 @@ func Execute() {
 
 	if appErr := rootCmd.Execute(); appErr != nil {
 		slog.Error("Exit status FAILURE", slog.String("error", appErr.Error()))
+	} else {
+		slog.Info("Exit status OK")
 	}
-	slog.Info("Exit status OK")
 }
