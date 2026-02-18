@@ -3,6 +3,7 @@ module github.com/tournabyte/webapi
 go 1.25.6
 
 require (
+	github.com/alexedwards/argon2id v1.0.0
 	github.com/gin-gonic/gin v1.11.0
 	github.com/minio/minio-go/v7 v7.0.98
 	github.com/spf13/cobra v1.10.2
@@ -13,7 +14,6 @@ require (
 )
 
 require (
-	github.com/alexedwards/argon2id v1.0.0 // indirect
 	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
