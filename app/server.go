@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-jose/go-jose/v4"
 	"github.com/tournabyte/webapi/internal/domains/user"
 	"github.com/tournabyte/webapi/internal/utils"
 )
@@ -59,17 +60,37 @@ func MinioClientFromConfig(cfg *ApplicationOptions) (*utils.MinioConnection, err
 	)
 }
 
+// Function `TokenSignerFromConfig` creates a token signer based on the tokens options in the given application configuration
+//
+// Parameters:
+//   - cfg: the application configuration to extract token options from
+//
+// Returns:
+//   - `jose.Signer`: token signer for application usage
+//   - `error`: reported issue on failure
+func TokenSignerFromConfig(cfg *ApplicationOptions) (jose.Signer, error) {
+	return jose.NewSigner(
+		jose.SigningKey{
+			Algorithm: jose.SignatureAlgorithm(cfg.Serve.Tokens.Algorithm),
+			Key:       []byte(cfg.Serve.Tokens.PrivateKey),
+		},
+		nil,
+	)
+}
+
 // Type `TournabyteAPIService` represents the API server for the tournabyte platform
 //
 // Fields:
 //   - router: the HTTP multiplexer for the API endpoints
 //   - db: the ephemeral database connection to a mongodb deployment
 //   - s3: the ephemeral s3 connection to a minio deployment
+//   - sess: the JWT signing tool for authorization checks
 //   - opts: the API configuration options for the API server
 type TournabyteAPIService struct {
 	router *gin.Engine
 	db     *utils.DatabaseConnection
 	s3     *utils.MinioConnection
+	sess   jose.Signer
 	opts   *ApplicationOptions
 }
 
@@ -84,6 +105,7 @@ type TournabyteAPIService struct {
 func NewTournabyteService(options *ApplicationOptions) (*TournabyteAPIService, error) {
 	db, dbErr := MongoClientFromConfig(options)
 	s3, s3Err := MinioClientFromConfig(options)
+	jwt, jwtErr := TokenSignerFromConfig(options)
 
 	if dbErr != nil {
 		slog.Error("Could not establish connection to mongodb deployment", slog.String("err", dbErr.Error()))
@@ -95,10 +117,16 @@ func NewTournabyteService(options *ApplicationOptions) (*TournabyteAPIService, e
 		return nil, s3Err
 	}
 
+	if jwtErr != nil {
+		slog.Error("Could not create the JWT signing tool", slog.String("err", jwtErr.Error()))
+		return nil, jwtErr
+	}
+
 	return &TournabyteAPIService{
 		router: gin.New(),
 		db:     db,
 		s3:     s3,
+		sess:   jwt,
 		opts:   options,
 	}, nil
 
@@ -113,6 +141,9 @@ func (srv *TournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
 
 	// POST /auth/register
 	auth.POST("register", user.CreateUserHandler(srv.db))
+
+	// POST /auth/login
+	auth.POST("login", user.CheckLoginHandler(srv.db, srv.sess))
 }
 
 // Function `(*TournabyteAPIService).RegisterRoutes` initializes the underlying engine with the appropriate routes for service

@@ -61,11 +61,18 @@ type ApplicationOptions struct {
 //   - UseTLS: indicates whether the server will use HTTP or HTTPS
 //   - CertFile: path to the certificate file for HTTPS operation
 //   - KeyFile: path to the keychain file for HTTPS operation
+//   - Tokens: options supporting the web token capabilities of the server
 type serviceOptions struct {
-	Port     uint   `mapstructure:"port"`
-	UseTLS   bool   `mapstructure:"useTLS"`
-	CertFile string `mapstructure:"certificateFile"`
-	KeyFile  string `mapstructure:"keychainFile"`
+	Port     uint                `mapstructure:"port"`
+	UseTLS   bool                `mapstructure:"useTLS"`
+	CertFile string              `mapstructure:"certificateFile"`
+	KeyFile  string              `mapstructure:"keychainFile"`
+	Tokens   tokenSigningOptions `mapstructure:"tokenOptions"`
+}
+
+type tokenSigningOptions struct {
+	Algorithm  string `mapstructure:"signingAlgorithm"`
+	PrivateKey string `mapstructure:"signingKey"`
 }
 
 // Type `databaseOptions` represents the webapi database options component of the configuration file structure
