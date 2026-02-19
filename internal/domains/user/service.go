@@ -45,7 +45,9 @@ func CreateUserRecord(ctx context.Context, conn *mongo.Client, userDetails *NewU
 
 	account.ID = bson.NewObjectID()
 	account.Sessions = make([]ActiveSession, 0)
-	secureCredentials(userDetails.Email, userDetails.Password, &loginDetails)
+	if err := secureCredentials(userDetails.Email, userDetails.Password, &loginDetails); err != nil {
+		return err
+	}
 	basicProfile(userDetails.DisplayName, &primaryProfile)
 	account.Credentials = loginDetails
 	account.PrimaryProfile = primaryProfile
@@ -96,20 +98,25 @@ func ValidateLoginCredentials(ctx context.Context, conn *mongo.Client, tokenSign
 			ctx,
 			bson.D{{Key: "login_credentials.email", Value: attempt.AuthenticateAs}},
 		).
-		Decode(account)
+		Decode(&account)
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return utils.ResourceNotFound()
+			slog.Error("Attempted to authenciate as non-existent user", slog.String("userID", attempt.AuthenticateAs))
+			return utils.NotAuthorized()
 		}
+		slog.Error("Could not retrieve account details for user", slog.String("userID", attempt.AuthenticateAs), slog.String("err", err.Error()))
 		return err
 	}
 
 	if match, err := argon2id.ComparePasswordAndHash(attempt.Passphrase, account.Credentials.PasswordHash); err != nil {
+		slog.Error("Failed to compare password and hash")
 		return utils.TryAgainLater()
 	} else if !match {
+		slog.Error("Password and hash comparison did not match")
 		return utils.NotAuthorized()
 	} else {
+		slog.Debug("Authentication successful, creating session...")
 		user.ID = account.ID.Hex()
 		user.Email = account.Credentials.Email
 		user.DisplayName = account.PrimaryProfile.DisplayName
@@ -202,15 +209,18 @@ func basicProfile(displayName string, profile *PlayerProfile) {
 }
 
 func makeSession(user *AuthenticatedUser, signer jose.Signer) error {
-	cl := jwt.Claims{
+	public := jwt.Claims{
 		Issuer:   "example.com",
-		Audience: jwt.Audience{"example-audience"},
+		Subject:  "Tournabyte API authorization",
 		Expiry:   jwt.NewNumericDate(time.Now().Add(10 * time.Minute)),
 		IssuedAt: jwt.NewNumericDate(time.Now()),
-		ID:       user.ID,
 	}
 
-	if raw, err := jwt.Signed(signer).Claims(cl).Serialize(); err != nil {
+	custom := AuthenticationTokenClaims{
+		Owner: user.ID,
+	}
+
+	if raw, err := jwt.Signed(signer).Claims(public).Claims(custom).Serialize(); err != nil {
 		return err
 	} else {
 		user.AccessToken = raw

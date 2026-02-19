@@ -58,6 +58,7 @@ func CreateUserHandler(conn *utils.DatabaseConnection) gin.HandlerFunc {
 //
 // Parameters:
 //   - db: the database connection this handler function will utilize to complete the read operations
+//   - tokenSigner: the JWT signing tool following an internal algorithm and private key
 //
 // Returns:
 //   - `gin.HandlerFunc`: closure capable of handling HTTP requests through integration with the HTTP gin framework
