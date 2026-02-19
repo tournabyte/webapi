@@ -14,7 +14,6 @@ package user
 import (
 	"log/slog"
 	"net/http"
-	"reflect"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-jose/go-jose/v4"
@@ -34,7 +33,7 @@ func CreateUserHandler(conn *utils.DatabaseConnection, signer jose.Signer) gin.H
 		var newUser AuthenticatedUser
 
 		if err := ctx.ShouldBindJSON(&body); err != nil {
-			slog.Error("Could not bind request body", slog.Any("expectedStructure", reflect.TypeOf(body)))
+			slog.Error("Could not bind request body", slog.AnyValue(err.Error()))
 			panic(utils.ValidationFailed("validationFailure", err.Error()))
 		}
 

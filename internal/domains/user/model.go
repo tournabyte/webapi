@@ -116,11 +116,3 @@ type AuthenticatedUser struct {
 	AccessToken  string `json:"accessToken"`
 	RefreshToken string `json:"refreshToken"`
 }
-
-// Type `AuthenticationTokenClaims` represents the custom claims present in a JWT produced by the Tournabyte API
-//
-// Fields:
-//   - Owner: private claim expected to be the userID of the account this token was issued to
-type AuthenticationTokenClaims struct {
-	Owner string `json:"owner"`
-}

@@ -222,14 +222,16 @@ func basicProfile(displayName string, profile *PlayerProfile) {
 }
 
 func makeSession(user *AuthenticatedUser, signer jose.Signer) error {
+	issueTime := time.Now().UTC()
 	public := jwt.Claims{
-		Issuer:   "example.com",
-		Subject:  "Tournabyte API authorization",
-		Expiry:   jwt.NewNumericDate(time.Now().Add(10 * time.Minute)),
-		IssuedAt: jwt.NewNumericDate(time.Now()),
+		Issuer:    "api.tournabyte.com",
+		Subject:   "Tournabyte API authorization",
+		Expiry:    jwt.NewNumericDate(issueTime.Add(10 * time.Minute)),
+		IssuedAt:  jwt.NewNumericDate(issueTime),
+		NotBefore: jwt.NewNumericDate(issueTime.Add(15 * time.Second)),
 	}
 
-	custom := AuthenticationTokenClaims{
+	custom := utils.AuthenticationTokenClaims{
 		Owner: user.ID,
 	}
 

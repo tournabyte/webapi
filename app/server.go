@@ -144,6 +144,25 @@ func (srv *TournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
 
 	// POST /auth/login
 	auth.POST("login", user.CheckLoginHandler(srv.db, srv.sess))
+
+	// GET /auth/:userid
+	auth.GET(
+		"/:userid",
+		utils.VerifyAuthorization(
+			[]byte(srv.opts.Serve.Tokens.PrivateKey),
+			jose.SignatureAlgorithm(srv.opts.Serve.Tokens.Algorithm),
+		),
+		func(ctx *gin.Context) {
+			type R struct {
+				ID string `uri:"userid" binding:"required,mongodb"`
+			}
+			var r R
+			if err := ctx.ShouldBindUri(&r); err != nil {
+				ctx.AbortWithStatusJSON(400, gin.H{"msg": err.Error()})
+			}
+			ctx.JSON(200, gin.H{"user": r.ID, "msg": "successfully accessed protected resource"})
+		},
+	)
 }
 
 // Function `(*TournabyteAPIService).RegisterRoutes` initializes the underlying engine with the appropriate routes for service
