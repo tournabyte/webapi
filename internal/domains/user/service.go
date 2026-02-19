@@ -37,14 +37,25 @@ import (
 //
 // Returns:
 //   - `error`: issue that occurred during the user creation operation (nil if no issue occurred)
-func CreateUserRecord(ctx context.Context, conn *mongo.Client, userDetails *NewUserRequest, inserted *AuthenticatedUser) error {
+func CreateUserRecord(ctx context.Context, conn *mongo.Client, signer jose.Signer, userDetails *NewUserRequest, inserted *AuthenticatedUser) error {
 	slog.Info("Creating new user record")
 	var account FullAccountDetails
 	var primaryProfile PlayerProfile
 	var loginDetails LoginCredentials
 
 	account.ID = bson.NewObjectID()
-	account.Sessions = make([]ActiveSession, 0)
+	if err := makeSession(inserted, signer); err != nil {
+		return err
+	}
+	var refresh ActiveSession
+	refresh.NotValidBefore = time.Now().UTC()
+	refresh.NotValidAfter = refresh.NotValidBefore.Add(72 * time.Hour)
+	if refreshHash, err := argon2id.CreateHash(inserted.RefreshToken, argon2id.DefaultParams); err != nil {
+		return err
+	} else {
+		refresh.TokenHash = refreshHash
+		account.Sessions = append(account.Sessions, refresh)
+	}
 	if err := secureCredentials(userDetails.Email, userDetails.Password, &loginDetails); err != nil {
 		return err
 	}
@@ -68,13 +79,15 @@ func CreateUserRecord(ctx context.Context, conn *mongo.Client, userDetails *NewU
 
 	if id, ok := res.InsertedID.(bson.ObjectID); ok {
 		inserted.ID = id.Hex()
-		return nil
+	} else {
+		id := fmt.Sprint(res.InsertedID)
+		id = strings.TrimPrefix(id, `ObjectID("`)
+		id = strings.TrimSuffix(id, `")`)
+		inserted.ID = id
 	}
 
-	id := fmt.Sprint(res.InsertedID)
-	id = strings.TrimPrefix(id, `ObjectID("`)
-	id = strings.TrimSuffix(id, `")`)
-	inserted.ID = id
+	inserted.Email = account.Credentials.Email
+	inserted.DisplayName = account.PrimaryProfile.DisplayName
 
 	return nil
 }
