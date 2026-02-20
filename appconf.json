@@ -1,25 +1,48 @@
 {
   "serve": {
-    "port": "7000"
+    "port": "3000",
+    "useTLS": false,
+    "tokenOptions": {
+      "signingAlgorithm": "HS256",
+      "signingKey": "jwtkey"
+    }
   },
   "mongodb": {
     "hosts": [
       "127.0.0.1:27017"
     ],
-    "username": "testAPIuser",
-    "password": "testAPIkey"
+    "username": "mongoadmin",
+    "password": "mongokey"
   },
   "minio": {
-    "endpoint": "localhost:4000",
-    "accessKey": "testAPIuser",
-    "secretKey": "testAPIkey"
+    "endpoint": "localhost:9000",
+    "accessKey": "minioadmin",
+    "secretKey": "miniokey"
   },
-  "log": {
-    "minLevel": "debug",
-    "destination": [
-      "std.out",
-      "/tmp/log/tournabyte/webapi.log"
-    ],
-    "json": true
-  }
+  "log": [
+    {
+      "level": "debug",
+      "destination": [
+        "std.out"
+      ],
+      "source": false,
+      "json": false
+    },
+    {
+      "level": "info",
+      "destination": [
+        "/tmp/log/tournabyte/webapi.log"
+      ],
+      "source": true,
+      "json": false
+    },
+    {
+      "level": "error",
+      "destination": [
+        "/tmp/log/tournabyte/webapi.json"
+      ],
+      "source": true,
+      "json": true
+    }
+  ]
 }
