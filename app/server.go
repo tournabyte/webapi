@@ -160,6 +160,9 @@ func (srv *TournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
 			if err := ctx.ShouldBindUri(&r); err != nil {
 				ctx.AbortWithStatusJSON(400, gin.H{"msg": err.Error()})
 			}
+			if r.ID != ctx.GetString(utils.AuthorizationClaims) {
+				ctx.AbortWithStatusJSON(401, gin.H{"msg": "Unauthorized"})
+			}
 			ctx.JSON(200, gin.H{"user": r.ID, "msg": "successfully accessed protected resource"})
 		},
 	)

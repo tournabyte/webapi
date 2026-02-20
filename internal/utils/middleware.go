@@ -20,6 +20,8 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 )
 
+const AuthorizationClaims = "UserAuthorization"
+
 // Type `AuthenticationTokenClaims` represents the custom claims present in a JWT produced by the Tournabyte API
 //
 // Fields:
@@ -89,12 +91,8 @@ func VerifyAuthorization(key []byte, signingAlgorithms ...jose.SignatureAlgorith
 				ctx.AbortWithStatusJSON(http.StatusUnauthorized, RespondWithError(NotAuthorized(), nil))
 				return
 			}
-			if custom.Owner != ctx.Param("userid") {
-				slog.Error("Custom claim validation failed", slog.String("err", "owner and userID do not match"), slog.String("tokenOwner", custom.Owner), slog.String("tokenPresenter", ctx.Param("userid")))
-				ctx.AbortWithStatusJSON(http.StatusUnauthorized, RespondWithError(NotAuthorized(), nil))
-				return
-			}
 
+			ctx.Set(AuthorizationClaims, custom.Owner)
 			ctx.Next()
 		}
 	}
