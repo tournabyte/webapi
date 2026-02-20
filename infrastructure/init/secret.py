@@ -53,7 +53,7 @@ def write_secret_to_file(env_dir: Path, key: str, value: str) -> None:
             value [str]: the secret to store
     """
     env_file = env_dir / f"{key}.txt"
-    with open(env_file, os.O_CREAT | os.O_WRONLY) as f:
+    with open(env_file, 'w') as f:
         f.write(f"{value}")
 
 
