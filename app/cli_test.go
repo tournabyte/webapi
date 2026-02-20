@@ -73,26 +73,53 @@ func TestInitAppContext_WithValidConfig(t *testing.T) {
 	tempConfigPath := tempDir + "/appconf.json"
 
 	configContent := `{
-		"serve": {
-			"port": 8080,
-			"useTLS": false
-		},
-		"log": {
-			"minLevel": "info",
-			"destination": ["std.out"],
-			"json": false
-		},
-		"mongodb": {
-			"hosts": ["localhost:27017"],
-			"username": "test",
-			"password": "test"
-		},
-		"minio": {
-			"endpoint": "http://localhost:9000",
-			"accessKey": "minioadmin",
-			"secretKey": "minioadmin"
-		}
-	}`
+  "serve": {
+    "port": "3000",
+    "useTLS": false,
+    "tokenOptions": {
+      "signingAlgorithm": "HS256",
+      "signingKey": "jwtkey"
+    }
+  },
+  "mongodb": {
+    "hosts": [
+      "127.0.0.1:27017"
+    ],
+    "username": "mongoadmin",
+    "password": "mongokey"
+  },
+  "minio": {
+    "endpoint": "localhost:9000",
+    "accessKey": "minioadmin",
+    "secretKey": "miniokey"
+  },
+  "log": [
+    {
+      "level": "debug",
+      "destination": [
+        "std.out"
+      ],
+      "source": false,
+      "json": false
+    },
+    {
+      "level": "info",
+      "destination": [
+        "/tmp/log/tournabyte/webapi.log"
+      ],
+      "source": true,
+      "json": false
+    },
+    {
+      "level": "error",
+      "destination": [
+        "/tmp/log/tournabyte/webapi.json"
+      ],
+      "source": true,
+      "json": true
+    }
+  ]
+}`
 
 	err := os.WriteFile(tempConfigPath, []byte(configContent), 0644)
 	require.NoError(t, err)

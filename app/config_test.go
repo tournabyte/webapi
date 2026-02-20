@@ -49,9 +49,9 @@ func TestAppConfig_UnmarshalOptions(t *testing.T) {
 	cfg.Opts.Set("minio.endpoint", "http://localhost:9000")
 	cfg.Opts.Set("minio.accessKey", "access")
 	cfg.Opts.Set("minio.secretKey", "secret")
-	cfg.Opts.Set("log.minLevel", "info")
-	cfg.Opts.Set("log.destination", []string{"std.out"})
-	cfg.Opts.Set("log.json", false)
+	cfg.Opts.Set("log", []loggingOptions{
+		{Level: "info", Destination: []string{"std.out"}, UseJSON: false, UseSource: false},
+	})
 
 	options, err := cfg.UnmarshalOptions()
 	require.NoError(t, err)
@@ -64,9 +64,11 @@ func TestAppConfig_UnmarshalOptions(t *testing.T) {
 	assert.Equal(t, "http://localhost:9000", options.Filestore.Endpoint)
 	assert.Equal(t, "access", options.Filestore.AccessKey)
 	assert.Equal(t, "secret", options.Filestore.SecretKey)
-	assert.Equal(t, "info", options.Log.Level)
-	assert.Equal(t, []string{"std.out"}, options.Log.Destination)
-	assert.Equal(t, false, options.Log.UseJSON)
+	assert.Equal(t, 1, len(options.Log))
+	assert.Equal(t, "info", options.Log[0].Level)
+	assert.Equal(t, []string{"std.out"}, options.Log[0].Destination)
+	assert.False(t, options.Log[0].UseJSON)
+	assert.False(t, options.Log[0].UseSource)
 }
 
 func TestInitLogs(t *testing.T) {
@@ -103,22 +105,13 @@ func TestInitLogs(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "default level to stdout",
+			name: "invalid level returns error",
 			logConfig: loggingOptions{
 				Level:       "unknown",
 				Destination: []string{"std.out"},
 				UseJSON:     false,
 			},
-			expectError: false,
-		},
-		{
-			name: "multiple destinations",
-			logConfig: loggingOptions{
-				Level:       "info",
-				Destination: []string{"std.out", "std.err"},
-				UseJSON:     false,
-			},
-			expectError: false,
+			expectError: true,
 		},
 		{
 			name: "invalid file destination",
@@ -190,10 +183,8 @@ func TestApplicationOptions_StructFields(t *testing.T) {
 			AccessKey: "minioadmin",
 			SecretKey: "minioadmin",
 		},
-		Log: loggingOptions{
-			Level:       "debug",
-			Destination: []string{"std.out", "std.err"},
-			UseJSON:     true,
+		Log: []loggingOptions{
+			{Level: "debug", Destination: []string{"std.out", "std.err"}, UseJSON: true, UseSource: true},
 		},
 	}
 
@@ -210,7 +201,9 @@ func TestApplicationOptions_StructFields(t *testing.T) {
 	assert.Equal(t, "minioadmin", options.Filestore.AccessKey)
 	assert.Equal(t, "minioadmin", options.Filestore.SecretKey)
 
-	assert.Equal(t, "debug", options.Log.Level)
-	assert.Equal(t, []string{"std.out", "std.err"}, options.Log.Destination)
-	assert.True(t, options.Log.UseJSON)
+	assert.Equal(t, 1, len(options.Log))
+	assert.Equal(t, "debug", options.Log[0].Level)
+	assert.Equal(t, []string{"std.out", "std.err"}, options.Log[0].Destination)
+	assert.True(t, options.Log[0].UseJSON)
+	assert.True(t, options.Log[0].UseSource)
 }

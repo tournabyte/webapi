@@ -33,7 +33,7 @@ func CreateUserHandler(conn *utils.DatabaseConnection, signer jose.Signer) gin.H
 		var newUser AuthenticatedUser
 
 		if err := ctx.ShouldBindJSON(&body); err != nil {
-			slog.Error("Could not bind request body", slog.AnyValue(err.Error()))
+			slog.Error("Could not bind request body", slog.String("error", err.Error()))
 			panic(utils.ValidationFailed("validationFailure", err.Error()))
 		}
 
