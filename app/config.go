@@ -12,6 +12,7 @@ package app
  */
 
 import (
+	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -49,7 +50,7 @@ func GetAppOpts() *ApplicationOptions {
 //   - Filestore: the file storage options component of the config. See `filestoreOptions` for more details
 type ApplicationOptions struct {
 	Serve     serviceOptions   `mapstructure:"serve"`
-	Log       loggingOptions   `mapstructure:"log"`
+	Log       []loggingOptions `mapstructure:"log"`
 	Database  databaseOptions  `mapstructure:"mongodb"`
 	Filestore filestoreOptions `mapstructure:"minio"`
 }
@@ -106,9 +107,10 @@ type filestoreOptions struct {
 //   - Destination: the locations to send emitted records to
 //   - UseJSON: boolean indicating to emit records as JSON or plaintext
 type loggingOptions struct {
-	Level       string   `mapstructure:"minLevel"`
+	Level       string   `mapstructure:"level"`
 	Destination []string `mapstructure:"destination"`
 	UseJSON     bool     `mapstructure:"json"`
+	UseSource   bool     `mapstructure:"source"`
 }
 
 // Function `initLogs` initializes structured logging for the application
@@ -118,50 +120,72 @@ type loggingOptions struct {
 //
 // Returns:
 //   - `error`: issue with logging setup (if any)
-func initLogs(logConfig loggingOptions) error {
+func initLogs(logConfigs ...loggingOptions) error {
+	var handlers []slog.Handler
+
+	for _, cfg := range logConfigs {
+		if h, err := makeHandler(cfg); err != nil {
+			return err
+		} else {
+			handlers = append(handlers, h)
+		}
+	}
+
+	slog.SetDefault(
+		slog.New(slog.NewMultiHandler(handlers...)),
+	)
+	return nil
+}
+
+// Function `makeHandler` creates the logging record handler corresponding to the given configuration object
+//
+// Parameters:
+//   - cfg: the logging configuration object to customize the resulting handler
+//
+// Returns:
+//   - `slog.Handler`: the handler to process logging records
+//   - `error`: the issue with producing the handler (nil if handler created successfully)
+func makeHandler(cfg loggingOptions) (slog.Handler, error) {
 	var level slog.Level
 	var outputs []io.Writer
 	var handler slog.Handler
+	var opts slog.HandlerOptions
 
-	slog.Debug("Configuring logging level", slog.String("provided", logConfig.Level))
-	switch logConfig.Level {
+	switch cfg.Level {
 	case "debug":
 		level = slog.LevelDebug
 	case "error":
 		level = slog.LevelError
 	case "warn":
 		level = slog.LevelWarn
-	default:
+	case "info":
 		level = slog.LevelInfo
+	default:
+		return nil, errors.New("Invalid logging level provided")
 	}
 
-	slog.Debug("Configuring logging destination(s)", slog.Any("provided", logConfig.Destination))
-	for _, dst := range logConfig.Destination {
+	for _, dst := range cfg.Destination {
 		switch dst {
 		case "std.out":
 			outputs = append(outputs, os.Stdout)
 		case "std.err":
 			outputs = append(outputs, os.Stderr)
 		default:
-			if f, err := os.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666); err != nil {
-				return err
+			if f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666); err != nil {
+				return nil, err
 			} else {
 				outputs = append(outputs, f)
 			}
 		}
 	}
-	handlerOpts := slog.HandlerOptions{Level: level, AddSource: true}
 
-	if logConfig.UseJSON {
-		slog.Debug("Logging configured to emit JSON messages")
-		handler = slog.NewJSONHandler(io.MultiWriter(outputs...), &handlerOpts)
+	opts = slog.HandlerOptions{Level: level, AddSource: cfg.UseSource}
+	if cfg.UseJSON {
+		handler = slog.NewJSONHandler(io.MultiWriter(outputs...), &opts)
 	} else {
-		slog.Debug("Logging configured to emit plaintext messages")
-		handler = slog.NewTextHandler(io.MultiWriter(outputs...), &handlerOpts)
+		handler = slog.NewTextHandler(io.MultiWriter(outputs...), &opts)
 	}
-
-	slog.SetDefault(slog.New(handler))
-	return nil
+	return handler, nil
 }
 
 // Type `AppConfig` manages the application configuration lifecyle using viper

@@ -77,7 +77,7 @@ func initAppContext(cmd *cobra.Command, args []string) error {
 	if cfg, err := appConfig.UnmarshalOptions(); err != nil {
 		return err
 	} else {
-		if err := initLogs(cfg.Log); err != nil {
+		if err := initLogs(cfg.Log...); err != nil {
 			return err
 		}
 		setAppOpts(cfg)
