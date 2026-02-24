@@ -22,7 +22,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-jose/go-jose/v4"
-	"github.com/tournabyte/webapi/internal/domains/user"
+	"github.com/tournabyte/webapi/internal/domains/auth"
 	"github.com/tournabyte/webapi/internal/utils"
 )
 
@@ -137,16 +137,16 @@ func NewTournabyteService(options *ApplicationOptions) (*TournabyteAPIService, e
 // Parameters:
 //   - parentGroup: the router group to attach to
 func (srv *TournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
-	auth := parentGroup.Group("auth")
+	authGroup := parentGroup.Group("auth")
 
 	// POST /auth/register
-	auth.POST("register", user.CreateUserHandler(srv.db, srv.sess))
+	authGroup.POST("register", auth.CreateUserHandler(srv.db, srv.sess))
 
 	// POST /auth/login
-	auth.POST("login", user.CheckLoginHandler(srv.db, srv.sess))
+	authGroup.POST("login", auth.CheckLoginHandler(srv.db, srv.sess))
 
 	// GET /auth/:userid
-	auth.GET(
+	authGroup.GET(
 		"/:userid",
 		utils.VerifyAuthorization(
 			[]byte(srv.opts.Serve.Tokens.PrivateKey),
