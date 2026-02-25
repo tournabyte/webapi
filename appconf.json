@@ -4,7 +4,7 @@
     "useTLS": false,
     "tokenOptions": {
       "signingAlgorithm": "HS256",
-      "signingKey": "jwtkey"
+      "signingKey": "c46c35c4a74485b9539e74a57182ac0aabaf909d5ae62dc0eb6f7d4f1f1d72cc"
     }
   },
   "mongodb": {
@@ -12,12 +12,12 @@
       "127.0.0.1:27017"
     ],
     "username": "mongoadmin",
-    "password": "mongokey"
+    "password": "v8Bscn-SUedmIQ1NDF9664uBNoMG30xstO25u43-PTiYHLBFkcIH_yATCHQBM-eLIYB47u3WbZOajWHiJshSZQ"
   },
   "minio": {
     "endpoint": "localhost:9000",
     "accessKey": "minioadmin",
-    "secretKey": "miniokey"
+    "secretKey": "xLXT3PTUKrRS_da8rO_8c3_Qi2NtHyK6EIblMeB7vgkCzEWyOhR6i1InDidPFRfIy2C2eAWxjPRZzQcCsPE0Sg"
   },
   "log": [
     {

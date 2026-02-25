@@ -35,25 +35,25 @@ func CreateUserHandler(conn *utils.DatabaseConnection, signer jose.Signer) gin.H
 
 		if err := ctx.ShouldBindJSON(&body); err != nil {
 			slog.Error("Could not bind request body", slog.String("error", err.Error()))
-			ctx.AbortWithStatusJSON(utils.ErrCouldNotBindRequestBody.StatusCode, utils.RespondWithError(utils.ErrCouldNotBindRequestBody, nil))
+			ctx.Error(err)
+			utils.RespondWithError(ctx, utils.ErrCouldNotBindRequestBody)
 			return
 		}
 
 		if sess, err := conn.Client().StartSession(); err != nil {
 			slog.Error("Could not start mongo session", slog.String("error", err.Error()))
-			ctx.AbortWithStatusJSON(utils.ErrUpstreamDataUnavailable.StatusCode, utils.RespondWithError(utils.ErrUpstreamDataUnavailable, nil))
+			ctx.Error(err)
+			utils.RespondWithError(ctx, utils.ErrUpstreamDataUnavailable)
 			return
 		} else {
 			defer sess.EndSession(ctx.Request.Context())
 			if err := CreateUserRecord(ctx, sess.Client(), signer, &body, &newUser); err != nil {
 				slog.Error("Could not create account", slog.String("error", err.Error()))
-				ctx.AbortWithStatusJSON(utils.ErrUpstreamDataUnavailable.StatusCode, utils.RespondWithError(utils.ErrUpstreamDataUnavailable, nil))
+				ctx.Error(err)
+				utils.RespondWithError(ctx, utils.ErrUpstreamDataUnavailable)
 				return
 			} else {
-				ctx.JSON(
-					http.StatusCreated,
-					utils.RespondWithRequestedData(newUser),
-				)
+				utils.RespondWithRequestedData(ctx, newUser, http.StatusCreated)
 				slog.InfoContext(ctx, "Handler invocation for user creation completed successfully")
 			}
 		}
@@ -76,24 +76,24 @@ func CheckLoginHandler(db *utils.DatabaseConnection, tokenSigner jose.Signer) gi
 
 		if err := ctx.ShouldBindJSON(&body); err != nil {
 			slog.Error("Could not bind request body", slog.String("error", err.Error()))
-			ctx.AbortWithStatusJSON(utils.ErrCouldNotBindRequestBody.StatusCode, utils.RespondWithError(utils.ErrCouldNotBindRequestBody, nil))
+			ctx.Error(err)
+			utils.RespondWithError(ctx, utils.ErrCouldNotBindRequestBody)
 			return
 		}
 
 		if sess, err := db.Client().StartSession(); err != nil {
 			slog.Error("Could not start mongo session", slog.String("error", err.Error()))
-			ctx.AbortWithStatusJSON(utils.ErrUpstreamDataUnavailable.StatusCode, utils.RespondWithError(utils.ErrUpstreamDataUnavailable, nil))
+			ctx.Error(err)
+			utils.RespondWithError(ctx, utils.ErrUpstreamDataUnavailable)
 			return
 		} else {
 			defer sess.EndSession(ctx.Request.Context())
 			if err := ValidateLoginCredentials(ctx, sess.Client(), tokenSigner, &body, &user); err != nil {
 				slog.Error("Could not validate credentials", slog.String("error", err.Error()))
-				ctx.AbortWithStatusJSON(utils.ErrInvalidLoginAttempt.StatusCode, utils.RespondWithError(utils.ErrInvalidLoginAttempt, nil))
+				ctx.Error(err)
+				utils.RespondWithError(ctx, utils.ErrUpstreamDataUnavailable)
 			} else {
-				ctx.JSON(
-					http.StatusOK,
-					utils.RespondWithRequestedData(user),
-				)
+				utils.RespondWithRequestedData(ctx, user, http.StatusOK)
 				slog.InfoContext(ctx, "Handler invocation for credential verification completed successfully")
 			}
 		}
