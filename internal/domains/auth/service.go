@@ -116,20 +116,16 @@ func ValidateLoginCredentials(ctx context.Context, conn *mongo.Client, tokenSign
 		Decode(&account)
 
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			slog.Error("Attempted to authenciate as non-existent user", slog.String("userID", attempt.AuthenticateAs))
-			return utils.NotAuthorized()
-		}
 		slog.Error("Could not retrieve account details for user", slog.String("userID", attempt.AuthenticateAs), slog.String("err", err.Error()))
 		return err
 	}
 
 	if match, err := argon2id.ComparePasswordAndHash(attempt.Passphrase, account.Credentials.PasswordHash); err != nil {
 		slog.Error("Failed to compare password and hash")
-		return utils.TryAgainLater()
+		return err
 	} else if !match {
 		slog.Error("Password and hash comparison did not match")
-		return utils.NotAuthorized()
+		return utils.ErrInvalidLoginAttempt
 	} else {
 		slog.Debug("Authentication successful, creating session...")
 		dst.ID = account.ID.Hex()
@@ -158,7 +154,7 @@ func ValidateLoginCredentials(ctx context.Context, conn *mongo.Client, tokenSign
 		if err != nil {
 			return err
 		} else if res.ModifiedCount != 1 {
-			return utils.TryAgainLater()
+			return utils.ErrInvalidLoginAttempt
 		} else {
 			return nil
 		}

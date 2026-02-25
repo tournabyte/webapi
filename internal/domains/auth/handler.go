@@ -35,17 +35,20 @@ func CreateUserHandler(conn *utils.DatabaseConnection, signer jose.Signer) gin.H
 
 		if err := ctx.ShouldBindJSON(&body); err != nil {
 			slog.Error("Could not bind request body", slog.String("error", err.Error()))
-			panic(utils.ValidationFailed("validationFailure", err.Error()))
+			ctx.AbortWithStatusJSON(utils.ErrCouldNotBindRequestBody.StatusCode, utils.RespondWithError(utils.ErrCouldNotBindRequestBody, nil))
+			return
 		}
 
 		if sess, err := conn.Client().StartSession(); err != nil {
 			slog.Error("Could not start mongo session", slog.String("error", err.Error()))
-			panic(utils.TryAgainLater("database", "failed to start session"))
+			ctx.AbortWithStatusJSON(utils.ErrUpstreamDataUnavailable.StatusCode, utils.RespondWithError(utils.ErrUpstreamDataUnavailable, nil))
+			return
 		} else {
 			defer sess.EndSession(ctx.Request.Context())
 			if err := CreateUserRecord(ctx, sess.Client(), signer, &body, &newUser); err != nil {
 				slog.Error("Could not create account", slog.String("error", err.Error()))
-				panic(utils.TryAgainLater("accountCreationFailed", err.Error()))
+				ctx.AbortWithStatusJSON(utils.ErrUpstreamDataUnavailable.StatusCode, utils.RespondWithError(utils.ErrUpstreamDataUnavailable, nil))
+				return
 			} else {
 				ctx.JSON(
 					http.StatusCreated,
@@ -73,17 +76,19 @@ func CheckLoginHandler(db *utils.DatabaseConnection, tokenSigner jose.Signer) gi
 
 		if err := ctx.ShouldBindJSON(&body); err != nil {
 			slog.Error("Could not bind request body", slog.String("error", err.Error()))
-			panic(utils.NotAuthorized())
+			ctx.AbortWithStatusJSON(utils.ErrCouldNotBindRequestBody.StatusCode, utils.RespondWithError(utils.ErrCouldNotBindRequestBody, nil))
+			return
 		}
 
 		if sess, err := db.Client().StartSession(); err != nil {
 			slog.Error("Could not start mongo session", slog.String("error", err.Error()))
-			panic(utils.TryAgainLater("database", "failed to start session"))
+			ctx.AbortWithStatusJSON(utils.ErrUpstreamDataUnavailable.StatusCode, utils.RespondWithError(utils.ErrUpstreamDataUnavailable, nil))
+			return
 		} else {
 			defer sess.EndSession(ctx.Request.Context())
 			if err := ValidateLoginCredentials(ctx, sess.Client(), tokenSigner, &body, &user); err != nil {
 				slog.Error("Could not validate credentials", slog.String("error", err.Error()))
-				panic(utils.NotAuthorized("credentials", "wrong email or password"))
+				ctx.AbortWithStatusJSON(utils.ErrInvalidLoginAttempt.StatusCode, utils.RespondWithError(utils.ErrInvalidLoginAttempt, nil))
 			} else {
 				ctx.JSON(
 					http.StatusOK,

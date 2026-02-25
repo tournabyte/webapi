@@ -41,15 +41,12 @@ func ErrorRecovery() gin.HandlerFunc {
 			err := recover()
 			if err != nil {
 				switch err := err.(type) {
-				case ErrAPIRequestFailed:
-					slog.Error("Recovering from structured API error", slog.String("err", err.Error()))
-					ctx.AbortWithStatusJSON(err.StatusCode(), RespondWithError(err.CausedBy, &err.Details))
 				case error:
-					slog.Error("Recovering from unstructured API error", slog.String("err", err.Error()))
+					slog.Error("Recovering from error panic", slog.String("error", err.Error()))
 					ctx.AbortWithStatusJSON(http.StatusInternalServerError, RespondWithError(err, nil))
 				default:
-					slog.Error("Recovering from incoming unknown error", slog.Any("err", err))
-					ctx.AbortWithStatusJSON(http.StatusInternalServerError, RespondWithError(TryAgainLater(), nil))
+					slog.Error("Recovering from non error panic")
+					ctx.AbortWithStatusJSON(http.StatusInternalServerError, RespondWithError(ErrUndisclosedHandlerFailure, nil))
 				}
 			}
 		}()
@@ -65,13 +62,13 @@ func VerifyAuthorization(key []byte, signingAlgorithms ...jose.SignatureAlgorith
 	return func(ctx *gin.Context) {
 		if raw := ctx.GetHeader(http.CanonicalHeaderKey("Authorization")); len(raw) == 0 {
 			slog.Error("Missing authorization header when it was expected")
-			ctx.AbortWithStatusJSON(http.StatusBadRequest, RespondWithError(NotAuthorized(), nil))
+			ctx.AbortWithStatusJSON(http.StatusBadRequest, RespondWithError(ErrInvalidAuthorizationToken, nil))
 		} else {
 			slog.Debug("Found authorization token", slog.String("raw", raw))
 			token, err := jwt.ParseSigned(raw, signingAlgorithms)
 			if err != nil {
 				slog.Error("Failed to parse signed token", slog.String("err", err.Error()))
-				ctx.AbortWithStatusJSON(http.StatusUnauthorized, RespondWithError(NotAuthorized(), nil))
+				ctx.AbortWithStatusJSON(http.StatusUnauthorized, RespondWithError(ErrInvalidAuthorizationToken, nil))
 				return
 			}
 			public := jwt.Claims{}
@@ -79,7 +76,7 @@ func VerifyAuthorization(key []byte, signingAlgorithms ...jose.SignatureAlgorith
 
 			if err := token.Claims(key, &custom, &public); err != nil {
 				slog.Error("Could not decode token claims", slog.String("err", err.Error()))
-				ctx.AbortWithStatusJSON(http.StatusUnauthorized, RespondWithError(NotAuthorized(), nil))
+				ctx.AbortWithStatusJSON(http.StatusUnauthorized, RespondWithError(ErrInvalidAuthorizationToken, nil))
 				return
 			}
 
@@ -89,12 +86,12 @@ func VerifyAuthorization(key []byte, signingAlgorithms ...jose.SignatureAlgorith
 			}
 			if err := public.Validate(expectedPublic); err != nil {
 				slog.Error("Public claims validation failed", slog.String("err", err.Error()))
-				ctx.AbortWithStatusJSON(http.StatusUnauthorized, RespondWithError(NotAuthorized(), nil))
+				ctx.AbortWithStatusJSON(http.StatusUnauthorized, RespondWithError(ErrInvalidAuthorizationToken, nil))
 				return
 			}
 			if err := validator.New().Struct(custom); err != nil {
 				slog.Error("Custom claims validation failed", slog.String("err", err.Error()))
-				ctx.AbortWithStatusJSON(http.StatusUnauthorized, RespondWithError(NotAuthorized(), nil))
+				ctx.AbortWithStatusJSON(http.StatusUnauthorized, RespondWithError(ErrInvalidAuthorizationToken, nil))
 				return
 			}
 
