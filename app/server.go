@@ -158,10 +158,14 @@ func (srv *TournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
 			}
 			var r R
 			if err := ctx.ShouldBindUri(&r); err != nil {
+				slog.Error("Could not bind URI parameter(s)")
 				ctx.AbortWithStatusJSON(400, gin.H{"msg": err.Error()})
+				return
 			}
 			if r.ID != ctx.GetString(utils.AuthorizationClaims) {
+				slog.ErrorContext(ctx, "Could not validate authorization claims", utils.AuthorizationClaims, ctx.GetString(utils.AuthorizationClaims))
 				ctx.AbortWithStatusJSON(401, gin.H{"msg": "Unauthorized"})
+				return
 			}
 			ctx.JSON(200, gin.H{"user": r.ID, "msg": "successfully accessed protected resource"})
 		},

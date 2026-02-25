@@ -11,12 +11,6 @@ package user
  *
  */
 
-//func UpdateLoginHandler(db *utils.DatabaseConnection) gin.HandlerFunc
-
-//func SessionRefreshHandler(db *utils.DatabaseConnection) gin.HandlerFunc
-
-//func SessionRevokeHandler(db *utils.DatabaseConnection) gin.HandlerFunc
-
 //func CreateProfileHandler(db *utils.DatabaseConnection) gin.HandlerFunc
 
 //func FindProfileHandler(db *utils.DatabaseConnection, s3 *utils.MinioConnection) gin.HandlerFunc

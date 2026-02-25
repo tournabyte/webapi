@@ -45,6 +45,7 @@ func CreateUserRecord(ctx context.Context, conn *mongo.Client, signer jose.Signe
 	var loginDetails user.LoginCredentials
 
 	account.ID = bson.NewObjectID()
+	inserted.ID = account.ID.Hex()
 	if err := makeSession(inserted, signer); err != nil {
 		return err
 	}
