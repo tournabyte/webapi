@@ -49,7 +49,7 @@ func TestErrorRecoveryMiddleware(t *testing.T) {
 		assert.Equal(t, http.StatusInternalServerError, statusCode)
 		assert.Contains(t, responseBody, `"ok":false`)
 		assert.Contains(t, responseBody, `"message":"panic 500"`)
-		assert.NotContains(t, responseBody, `"details":`)
+		assert.Contains(t, responseBody, `"details":null`)
 	})
 
 	t.Run("HTTP5XX", func(t *testing.T) {
@@ -63,6 +63,6 @@ func TestErrorRecoveryMiddleware(t *testing.T) {
 		assert.Equal(t, http.StatusInternalServerError, statusCode)
 		assert.Contains(t, responseBody, `"ok":false`)
 		assert.Contains(t, responseBody, `"message":"try again later"`)
-		assert.NotContains(t, responseBody, `"details":`)
+		assert.Contains(t, responseBody, `"details":null`)
 	})
 }

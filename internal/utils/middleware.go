@@ -43,10 +43,10 @@ func ErrorRecovery() gin.HandlerFunc {
 				switch err := err.(type) {
 				case error:
 					slog.Error("Recovering from error panic", slog.String("error", err.Error()))
-					ctx.AbortWithStatusJSON(http.StatusInternalServerError, RespondWithError(err, nil))
+					RespondWithError(ctx, err)
 				default:
 					slog.Error("Recovering from non error panic")
-					ctx.AbortWithStatusJSON(http.StatusInternalServerError, RespondWithError(ErrUndisclosedHandlerFailure, nil))
+					RespondWithError(ctx, ErrUndisclosedHandlerFailure)
 				}
 			}
 		}()
@@ -62,13 +62,14 @@ func VerifyAuthorization(key []byte, signingAlgorithms ...jose.SignatureAlgorith
 	return func(ctx *gin.Context) {
 		if raw := ctx.GetHeader(http.CanonicalHeaderKey("Authorization")); len(raw) == 0 {
 			slog.Error("Missing authorization header when it was expected")
-			ctx.AbortWithStatusJSON(http.StatusBadRequest, RespondWithError(ErrInvalidAuthorizationToken, nil))
+			RespondWithError(ctx, ErrInvalidAuthorizationToken)
 		} else {
 			slog.Debug("Found authorization token", slog.String("raw", raw))
 			token, err := jwt.ParseSigned(raw, signingAlgorithms)
 			if err != nil {
 				slog.Error("Failed to parse signed token", slog.String("err", err.Error()))
-				ctx.AbortWithStatusJSON(http.StatusUnauthorized, RespondWithError(ErrInvalidAuthorizationToken, nil))
+				ctx.Error(err)
+				RespondWithError(ctx, ErrInvalidAuthorizationToken)
 				return
 			}
 			public := jwt.Claims{}
@@ -76,7 +77,8 @@ func VerifyAuthorization(key []byte, signingAlgorithms ...jose.SignatureAlgorith
 
 			if err := token.Claims(key, &custom, &public); err != nil {
 				slog.Error("Could not decode token claims", slog.String("err", err.Error()))
-				ctx.AbortWithStatusJSON(http.StatusUnauthorized, RespondWithError(ErrInvalidAuthorizationToken, nil))
+				ctx.Error(err)
+				RespondWithError(ctx, ErrInvalidAuthorizationToken)
 				return
 			}
 
@@ -86,17 +88,19 @@ func VerifyAuthorization(key []byte, signingAlgorithms ...jose.SignatureAlgorith
 			}
 			if err := public.Validate(expectedPublic); err != nil {
 				slog.Error("Public claims validation failed", slog.String("err", err.Error()))
-				ctx.AbortWithStatusJSON(http.StatusUnauthorized, RespondWithError(ErrInvalidAuthorizationToken, nil))
+				ctx.Error(err)
+				RespondWithError(ctx, ErrInvalidAuthorizationToken)
 				return
 			}
 			if err := validator.New().Struct(custom); err != nil {
 				slog.Error("Custom claims validation failed", slog.String("err", err.Error()))
-				ctx.AbortWithStatusJSON(http.StatusUnauthorized, RespondWithError(ErrInvalidAuthorizationToken, nil))
+				ctx.Error(err)
+				RespondWithError(ctx, ErrInvalidAuthorizationToken)
 				return
 			}
 
 			ctx.Set(AuthorizationClaims, custom.Owner)
-			slog.DebugContext(ctx, "Set authorization token owner ID in request context", slog.Any("owner", custom.Owner))
+			slog.DebugContext(ctx, "Set authorization token owner ID in request context", slog.String("owner", custom.Owner))
 			ctx.Next()
 		}
 	}
