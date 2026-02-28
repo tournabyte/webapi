@@ -91,6 +91,25 @@ func FindOptsWith(opts ...FindOperationOption) (*options.FindOptionsBuilder, err
 	return config, nil
 }
 
+// Function `FindOneOptsWith` creates `options.FindOneOptionsBuilder` type with the given options
+// Parameters:
+//   - ...opts: the configuration option function to apply to the `options.FindOneOptionsBuilder` instance
+//
+// Returns:
+//   - `*options.FindOneOptionsBuilder`: the mongo-driver find one options lister (nil if an error occurred)
+//   - `error`: the issue with the findopts configuration specified (nil if no issue occurred)
+func FindOneOptsWith(opts ...FindOneOperationOption) (*options.FindOneOptionsBuilder, error) {
+	config := options.FindOne()
+
+	for _, opt := range opts {
+		if err := opt(config); err != nil {
+			return nil, err
+		}
+	}
+
+	return config, nil
+}
+
 // Function `InsertOptsWith` creates `options.InsertManyOptionsBuilder` type with the given options
 // Parameters:
 //   - ...opts: the configuration option functions to apply to the `options.InsertManyOptionsBuilder` instance
@@ -403,53 +422,92 @@ const (
 	ZeroStructs
 )
 
-// Function `ProjectionSpecification` provides the FindOperationOption to specify fields to keep/discard in a find operation
+// Function `FindProjectSpec` provides the FindOperationOption to specify fields to keep/discard in a find operation
 // Parameters:
 //   - specs: fields to keep or discard
 //
 // Returns:
 //   - `FindOperationOption`: closure to set the given `options.FindOptionsBuilder` instance's projection setting
-func ProjectionSpecification(selectors ...projectionSelector) FindOperationOption {
+func FindProjectSpec(selectors ...projectionSelector) FindOperationOption {
 	return func(opts *options.FindOptionsBuilder) error {
 		opts.SetProjection(merge(selectors...))
 		return nil
 	}
 }
 
-// Function `SkipFirstN` provides the FindOperationOption to specify the number of documents to skip in a find operation
+// Function `FindOffset` provides the FindOperationOption to specify the number of documents to skip in a find operation
 // Parameters:
 //   - skip: number of documents to skip
 //
 // Returns:
 //   - `FindOperationOption`: closure to set the given `options.FindOptionsBuilder` instance's skip setting
-func SkipFirstN(skip int64) FindOperationOption {
+func FindOffset(skip int64) FindOperationOption {
 	return func(opts *options.FindOptionsBuilder) error {
 		opts.SetSkip(skip)
 		return nil
 	}
 }
 
-// Function `MatchCountLimit` provides the FindOperationOption to specify the operation document limit
+// Function `FindResultLimit` provides the FindOperationOption to specify the operation document limit
 // Parameters:
 //   - limit: number of document to limit resultset to
 //
 // Returns:
 //   - `FindOperationOption`: closure to set the given `options.FindOptionsBuilder` instance's limit setting
-func MatchCountLimit(limit int64) FindOperationOption {
+func FindResultLimit(limit int64) FindOperationOption {
 	return func(opts *options.FindOptionsBuilder) error {
 		opts.SetLimit(limit)
 		return nil
 	}
 }
 
-// Function `SortResultsBy` provides the FindOperationOption to specify the operation's sort key
+// Function `FindSortKey` provides the FindOperationOption to specify the operation's sort key
 // Parameters:
 //   - sortBy: key to sort the resultset by
 //
 // Returns:
 //   - `FindOperationOption`: closure to set the given `options.FindOptionsBuilder` instance's sort setting
-func SortResultsBy(sortBy ...sortKey) FindOperationOption {
+func FindSortKey(sortBy ...sortKey) FindOperationOption {
 	return func(opts *options.FindOptionsBuilder) error {
+		opts.SetSort(merge(sortBy...))
+		return nil
+	}
+}
+
+// Function `FindOneProjectSpec` provides the FindOneOperationOption to specify fields to keep/discard in a find operation
+// Parameters:
+//   - specs: fields to keep or discard
+//
+// Returns:
+//   - `FindOneOperationOption`: closure to set the given `options.FindOneOptionsBuilder` instance's projection setting
+func FindOneProjectSpec(selectors ...projectionSelector) FindOneOperationOption {
+	return func(opts *options.FindOneOptionsBuilder) error {
+		opts.SetProjection(merge(selectors...))
+		return nil
+	}
+}
+
+// Function `FindOneOffset` provides the FindOneOperationOption to specify the number of documents to skip in a find operation
+// Parameters:
+//   - skip: number of documents to skip
+//
+// Returns:
+//   - `FindOneOperationOption`: closure to set the given `options.FindOneOptionsBuilder` instance's skip setting
+func FindOneOffset(skip int64) FindOneOperationOption {
+	return func(opts *options.FindOneOptionsBuilder) error {
+		opts.SetSkip(skip)
+		return nil
+	}
+}
+
+// Function `FindOneSortKey` provides the FindOneOperationOption to specify the operation's sort key
+// Parameters:
+//   - sortBy: key to sort the resultset by
+//
+// Returns:
+//   - `FindOneOperationOption`: closure to set the given `options.FindOneOptionsBuilder` instance's sort setting
+func FindOneSortKey(sortBy ...sortKey) FindOneOperationOption {
+	return func(opts *options.FindOneOptionsBuilder) error {
 		opts.SetSort(merge(sortBy...))
 		return nil
 	}
