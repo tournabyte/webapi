@@ -189,25 +189,6 @@ func UpdateOneOptsWith(opts ...UpdateOneOperationOption) (*options.UpdateOneOpti
 	return config, nil
 }
 
-// Function `DeleteOptsWith` creates `options.DeleteManyOptionsBuilder` type with the given options
-// Parameters:
-//   - ...opts: the configuration option functions to apply to the `options.DeleteManyOptionsBuilder` instance
-//
-// Returns:
-//   - `*options.DeleteManyOptionsBuilder`: the mongo-driver delete options lister (nil if an error occurred)
-//   - `error`: the issue with the delete opts configuration specified (nil if no issue occurred)
-func DeleteOptsWith(opts ...DeleteOperationOption) (*options.DeleteManyOptionsBuilder, error) {
-	config := options.DeleteMany()
-
-	for _, opt := range opts {
-		if err := opt(config); err != nil {
-			return nil, err
-		}
-	}
-
-	return config, nil
-}
-
 // Function `MongoClientAppName` provides a MongoClientOption to set the connection's application name
 // Parameters:
 //   - name: the application name to use for the connection option
@@ -679,49 +660,37 @@ func UpdateOneArrayElementFilter(filters ...filterCondition) UpdateOneOperationO
 	}
 }
 
-// Type `sortingOrder` represents the order a sorting operation will take
-type sortingOrder int
-
-// Type `projectionState` represents the action to be taken on a field within a resultset
-type projectionState int
-
-// Type `filterConditionOperator` represents an operator to determine if a document meets a filter condition
-type filterConditionOperator string
-
-// Type `updateOperator` represents an operator to determine how a document will be modified
-type updateOperator string
-
 const (
-	SortAscending  sortingOrder = 1
-	SortDescending sortingOrder = -1
+	SortAscending  = 1
+	SortDescending = -1
 )
 
 // Enumeration on projection selection states
 const (
-	ProjectionDiscard projectionState = 0
-	ProjectionRetain  projectionState = 1
+	ProjectionDiscard = 0
+	ProjectionRetain  = 1
 )
 
 // Enumeration of filter condition operators
 const (
-	FilterGreaterThan          filterConditionOperator = "$gt"
-	FilterGreaterThanOrEqualTo filterConditionOperator = "$gte"
-	FilterLessThan             filterConditionOperator = "$lt"
-	FilterLessThanOrEqualTo    filterConditionOperator = "$lte"
-	FilterValueInArray         filterConditionOperator = "$in"
-	FilterValueNotInArray      filterConditionOperator = "$nin"
-	FilterLogicalAnd           filterConditionOperator = "$and"
-	FilterLogicalOr            filterConditionOperator = "$or"
-	FilterLogicalNot           filterConditionOperator = "$not"
-	FilterFieldExists          filterConditionOperator = "$exists"
+	FilterGreaterThan          = "$gt"
+	FilterGreaterThanOrEqualTo = "$gte"
+	FilterLessThan             = "$lt"
+	FilterLessThanOrEqualTo    = "$lte"
+	FilterValueInArray         = "$in"
+	FilterValueNotInArray      = "$nin"
+	FilterLogicalAnd           = "$and"
+	FilterLogicalOr            = "$or"
+	FilterLogicalNot           = "$not"
+	FilterFieldExists          = "$exists"
 )
 
 // Enumeration of update operator tokens
 const (
-	UpdateSetValue       updateOperator = "$set"
-	UpdateIncrementValue updateOperator = "$inc"
-	UpdateDecrementValue updateOperator = "$dec"
-	UpdateMultiplyValue  updateOperator = "$mul"
+	UpdateSetValue       = "$set"
+	UpdateIncrementValue = "$inc"
+	UpdateDecrementValue = "$dec"
+	UpdateMultiplyValue  = "$mul"
 )
 
 // Type `sortKey` represents a sorting instruction indicating a field and an ordering direction
@@ -818,7 +787,7 @@ func Gt(field string, minValue any) filterCondition {
 	return func() bson.E {
 		return bson.E{
 			Key: field, Value: bson.E{
-				Key: string(FilterGreaterThan), Value: minValue,
+				Key: FilterGreaterThan, Value: minValue,
 			},
 		}
 	}
@@ -835,7 +804,7 @@ func Lt(field string, maxValue any) filterCondition {
 	return func() bson.E {
 		return bson.E{
 			Key: field, Value: bson.E{
-				Key: string(FilterLessThan), Value: maxValue,
+				Key: FilterLessThan, Value: maxValue,
 			},
 		}
 	}
@@ -852,7 +821,7 @@ func Gte(field string, minValueIncluded any) filterCondition {
 	return func() bson.E {
 		return bson.E{
 			Key: field, Value: bson.E{
-				Key: string(FilterGreaterThanOrEqualTo), Value: minValueIncluded,
+				Key: FilterGreaterThanOrEqualTo, Value: minValueIncluded,
 			},
 		}
 	}
@@ -869,7 +838,7 @@ func Lte(field string, maxValueIncluded any) filterCondition {
 	return func() bson.E {
 		return bson.E{
 			Key: field, Value: bson.E{
-				Key: string(FilterLessThanOrEqualTo), Value: maxValueIncluded,
+				Key: FilterLessThanOrEqualTo, Value: maxValueIncluded,
 			},
 		}
 	}
@@ -886,7 +855,7 @@ func In(field string, values ...any) filterCondition {
 	return func() bson.E {
 		return bson.E{
 			Key: field, Value: bson.E{
-				Key: string(FilterValueInArray), Value: values,
+				Key: FilterValueInArray, Value: values,
 			},
 		}
 	}
@@ -903,7 +872,7 @@ func NotIn(field string, values ...any) filterCondition {
 	return func() bson.E {
 		return bson.E{
 			Key: field, Value: bson.E{
-				Key: string(FilterValueNotInArray), Value: values,
+				Key: FilterValueNotInArray, Value: values,
 			},
 		}
 	}
@@ -922,7 +891,7 @@ func And(conditions ...filterCondition) filterCondition {
 			clauses = append(clauses, cond())
 		}
 		return bson.E{
-			Key: string(FilterLogicalAnd), Value: clauses,
+			Key: FilterLogicalAnd, Value: clauses,
 		}
 	}
 }
@@ -940,7 +909,7 @@ func Or(conditions ...filterCondition) filterCondition {
 			clauses = append(clauses, cond())
 		}
 		return bson.E{
-			Key: string(FilterLogicalOr), Value: clauses,
+			Key: FilterLogicalOr, Value: clauses,
 		}
 	}
 }
@@ -954,7 +923,7 @@ func Or(conditions ...filterCondition) filterCondition {
 func Not(condition filterCondition) filterCondition {
 	return func() bson.E {
 		return bson.E{
-			Key: string(FilterLogicalNot), Value: condition(),
+			Key: FilterLogicalNot, Value: condition(),
 		}
 	}
 }
@@ -969,7 +938,7 @@ func Exists(field string) filterCondition {
 	return func() bson.E {
 		return bson.E{
 			Key: field, Value: bson.E{
-				Key: string(FilterFieldExists), Value: true,
+				Key: FilterFieldExists, Value: true,
 			},
 		}
 	}
@@ -985,7 +954,7 @@ func NotExists(field string) filterCondition {
 	return func() bson.E {
 		return bson.E{
 			Key: field, Value: bson.E{
-				Key: string(FilterFieldExists), Value: false,
+				Key: FilterFieldExists, Value: false,
 			},
 		}
 	}
@@ -1001,7 +970,7 @@ func NotExists(field string) filterCondition {
 func Set(field string, value any) updateInstruction {
 	return func() bson.E {
 		return bson.E{
-			Key: string(UpdateSetValue), Value: bson.E{
+			Key: UpdateSetValue, Value: bson.E{
 				Key: field, Value: value,
 			},
 		}
@@ -1018,7 +987,7 @@ func Set(field string, value any) updateInstruction {
 func Increment(field string, step any) updateInstruction {
 	return func() bson.E {
 		return bson.E{
-			Key: string(UpdateIncrementValue), Value: bson.E{
+			Key: UpdateIncrementValue, Value: bson.E{
 				Key: field, Value: step,
 			},
 		}
@@ -1035,7 +1004,7 @@ func Increment(field string, step any) updateInstruction {
 func Decrement(field string, step any) updateInstruction {
 	return func() bson.E {
 		return bson.E{
-			Key: string(UpdateDecrementValue), Value: bson.E{
+			Key: UpdateDecrementValue, Value: bson.E{
 				Key: field, Value: step,
 			},
 		}
@@ -1052,7 +1021,7 @@ func Decrement(field string, step any) updateInstruction {
 func Scale(field string, step any) updateInstruction {
 	return func() bson.E {
 		return bson.E{
-			Key: string(UpdateMultiplyValue), Value: bson.E{
+			Key: UpdateMultiplyValue, Value: bson.E{
 				Key: field, Value: step,
 			},
 		}
