@@ -129,6 +129,25 @@ func InsertOptsWith(opts ...InsertOperationOption) (*options.InsertManyOptionsBu
 	return config, nil
 }
 
+// Function `InsertOneOptsWith` creates `options.InsertOneOptionsBuilder` type with the given options
+// Parameters:
+//   - ...opts: the configuration option functions to apply to the `options.InsertOneOptionsBuilder` instance
+//
+// Returns:
+//   - `*options.InsertOneOptionsBuilder`: the mongo-driver insert one options lister (nil if an error occurred)
+//   - `error`: the issue with the insert opts configuration specified (nil if no issue occurred)
+func InsertOneOptsWith(opts ...InsertOneOperationOption) (*options.InsertOneOptionsBuilder, error) {
+	config := options.InsertOne()
+
+	for _, opt := range opts {
+		if err := opt(config); err != nil {
+			return nil, err
+		}
+	}
+
+	return config, nil
+}
+
 // Function `UpdateOptsWith` creates `options.UpdateManyOptionsBuilder` type with the given options
 // Parameters
 //   - ...opts: the configuration option functions to apply to the `options.UpdateManyOptionsBuilder` instance
@@ -535,6 +554,19 @@ func ValidateInsertedDocuments(validate bool) InsertOperationOption {
 func StopOnError(failfast bool) InsertOperationOption {
 	return func(opts *options.InsertManyOptionsBuilder) error {
 		opts.SetOrdered(failfast)
+		return nil
+	}
+}
+
+// Function `ValidateInsertedDocument` enforces document validation for the insert operation
+// Parameters:
+//   - validate: true to enforce validation rules, false to bypass
+//
+// Returns:
+//   - `InsertOneOperationOption`: closure to set the given `options.InsertOneOptionsBuilder` instance validation bypass setting
+func ValidateUpdatedDocument(validate bool) InsertOneOperationOption {
+	return func(opts *options.InsertOneOptionsBuilder) error {
+		opts.SetBypassDocumentValidation(!validate)
 		return nil
 	}
 }
