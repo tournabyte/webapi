@@ -46,6 +46,9 @@ type InsertOneOperationOption func(*options.InsertOneOptionsBuilder) error
 // Type `UpdateOperationOption` is a functional setter for the mongo-driver update many options
 type UpdateOperationOption func(*options.UpdateManyOptionsBuilder) error
 
+// Type `UpdateOneOperationOption` is a functional setter for the mongo-driver update one options
+type UpdateOneOperationOption func(*options.UpdateOneOptionsBuilder) error
+
 // Type `DeleteOperationOption` is a functional setter for the mongo-driver delete many options
 type DeleteOperationOption func(*options.DeleteManyOptionsBuilder) error
 
@@ -157,6 +160,25 @@ func InsertOneOptsWith(opts ...InsertOneOperationOption) (*options.InsertOneOpti
 //   - `error`: the issue with the update opts configuration specified (nil if no issue occurred)
 func UpdateOptsWith(opts ...UpdateOperationOption) (*options.UpdateManyOptionsBuilder, error) {
 	config := options.UpdateMany()
+
+	for _, opt := range opts {
+		if err := opt(config); err != nil {
+			return nil, err
+		}
+	}
+
+	return config, nil
+}
+
+// Function `UpdateOneOptsWith` creates `options.UpdateOneOptionsBuilder` type with the given options
+// Parameters
+//   - ...opts: the configuration option functions to apply to the `options.UpdateOneOptionsBuilder` instance
+//
+// Returns
+//   - `*options.UpdateOneOptionsBuilder`: the mongo-driver update options lister (nil if an error occurred)
+//   - `error`: the issue with the update opts configuration specified (nil if no issue occurred)
+func UpdateOneOptsWith(opts ...UpdateOneOperationOption) (*options.UpdateOneOptionsBuilder, error) {
+	config := options.UpdateOne()
 
 	for _, opt := range opts {
 		if err := opt(config); err != nil {
@@ -564,7 +586,7 @@ func StopOnError(failfast bool) InsertOperationOption {
 //
 // Returns:
 //   - `InsertOneOperationOption`: closure to set the given `options.InsertOneOptionsBuilder` instance validation bypass setting
-func ValidateUpdatedDocument(validate bool) InsertOneOperationOption {
+func ValidateInsertedDocument(validate bool) InsertOneOperationOption {
 	return func(opts *options.InsertOneOptionsBuilder) error {
 		opts.SetBypassDocumentValidation(!validate)
 		return nil
@@ -584,27 +606,70 @@ func ValidateUpdatedDocuments(validate bool) UpdateOperationOption {
 	}
 }
 
-// Function `AllowInsertOnNoMatchFound` enables upsert behavior for cases when the filter does not find a matching document
+// Function `DoInsertsOnNoMatchFound` enables upsert behavior for cases when the filter does not find matching documents
 // Parameters:
 //   - upsert: true to allow upsertion, false to not apply updates
 //
 // Returns:
 //   - `UpdateOperationOption`: closure to set the given `options.UpdateManyOptionsBuilder` instance upsert setting
-func AllowInsertOnNoMatchFound(upsert bool) UpdateOperationOption {
+func DoInsertsOnNoMatchFound(upsert bool) UpdateOperationOption {
 	return func(opts *options.UpdateManyOptionsBuilder) error {
 		opts.SetUpsert(upsert)
 		return nil
 	}
 }
 
-// Function `ArrayElementFilter` specifies which elements of the array to apply an update to
+// Function `UpdateArrayElementFilter` specifies which elements of the array to apply an update to
 // Parameters:
 //   - ...filters: matching conditions to determine if an update should apply to an array element
 //
 // Returns:
 //   - `UpdateOperationOption`: closure to set the given `options.UpdateManyOptionsBuilder` array filter setting
-func ArrayElementFilter(filters ...filterCondition) UpdateOperationOption {
+func UpdateArrayElementFilter(filters ...filterCondition) UpdateOperationOption {
 	return func(opts *options.UpdateManyOptionsBuilder) error {
+		var af []any
+		for _, f := range filters {
+			af = append(af, f())
+		}
+		opts.SetArrayFilters(af)
+		return nil
+	}
+}
+
+// Function `ValidateUpdatedDocument` enforces document validation for the update one operation
+// Parameters:
+//   - validate: true to enforce validation rules, false to bypass
+//
+// Returns:
+//   - `UpdateOneOperationOption`: closure to set the given `options.UpdateOneOptionsBuilder` instance validation bypass setting
+func ValidateUpdatedDocument(validate bool) UpdateOneOperationOption {
+	return func(opts *options.UpdateOneOptionsBuilder) error {
+		opts.SetBypassDocumentValidation(!validate)
+		return nil
+	}
+}
+
+// Function `DoInsertOnNoMatchFound` enables upsert behavior for cases when the filter does not find a matching document
+// Parameters:
+//   - upsert: true to allow upsertion, false to not apply updates
+//
+// Returns:
+//   - `UpdateOneOperationOption`: closure to set the given `options.UpdateOneOptionsBuilder` instance upsert setting
+func DoInsertOnNoMatchFound(upsert bool) UpdateOneOperationOption {
+	return func(opts *options.UpdateOneOptionsBuilder) error {
+		opts.SetUpsert(upsert)
+		return nil
+	}
+}
+
+// Function `UpdateOneArrayElementFilter` specifies which elements of the array to apply an update to
+// Parameters:
+//   - ...filters: matching conditions to determine if an update should apply to an array element
+//
+// Returns:
+//   - `UpdateOperationOption`: closure to set the given `options.UpdateOneOptionsBuilder` array filter setting
+func UpdateOneArrayElementFilter(filters ...filterCondition) UpdateOneOperationOption {
+	return func(opts *options.UpdateOneOptionsBuilder) error {
 		var af []any
 		for _, f := range filters {
 			af = append(af, f())
