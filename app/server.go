@@ -36,9 +36,9 @@ import (
 func MongoClientFromConfig(cfg *ApplicationOptions) (*utils.DatabaseConnection, error) {
 	slog.Info("Creating mongodb client")
 	return utils.NewMongoConnection(
-		utils.MongoAppName("Tournabyte API"),
-		utils.MongoCredentials(cfg.Database.Username, cfg.Database.Password),
-		utils.MongoHosts(cfg.Database.Hosts...),
+		utils.MongoClientAppName("Tournabyte API"),
+		utils.MongoClientCredentials(cfg.Database.Username, cfg.Database.Password),
+		utils.MongoClientHosts(cfg.Database.Hosts...),
 	)
 }
 
