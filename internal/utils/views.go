@@ -69,3 +69,35 @@ func RespondWithError(ctx *gin.Context, err error) {
 		ctx.AbortWithStatusJSON(http.StatusInternalServerError, body)
 	}
 }
+
+// Function `DidBindBody` attempts to bind the request body to the specified struct
+//
+// Parameters:
+//   - ctx: the context containing the request body
+//   - dst: the location to decode the body to
+//
+// Returns:
+//   - `bool`: value indicating whether the binding process succeeded or not
+func DidBindBody(ctx *gin.Context, dst any) bool {
+	if err := ctx.ShouldBindJSON(dst); err != nil {
+		ctx.Error(err)
+		return false
+	}
+	return true
+}
+
+// Function `DidBindURI` attempts to bind the request URI parameters to the specified struct
+//
+// Parameters:
+//   - ctx: the context containing the request URI
+//   - dst: the location to decode the URI values to
+//
+// Returns:
+//   - `bool`: value indicating whether the binding process succeeded or not
+func DidBindURI(ctx *gin.Context, dst any) bool {
+	if err := ctx.ShouldBindUri(dst); err != nil {
+		ctx.Error(err)
+		return false
+	}
+	return true
+}
