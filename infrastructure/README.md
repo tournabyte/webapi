@@ -61,12 +61,16 @@ options:
 - The secrets will be automatically written to `.env/` as a subdirectory on this file's current directory
 - Re-running this tool with the same arguments will *overwrite* the existing secret
 - Supported secrets are currently:
-  - DBROOT_USERNAME: the root user for the mongoDB instance
-  - DBROOT_PASSWORD: the root password for the mongoDB instance
-  - S3ROOT_USERNAME: the root user for the minIO instance
-  - S3ROOT_PASSWORD: the root password for the minIO instance 
+  - `DBROOT01_USERNAME`: the root user for the primary `mongod` instance
+  - `DBROOT01_PASSWORD`: the root password for the primary `mongod` instance
+  - `DBROOT0X_PASSWORD`: the root password for secondary `mongod` instances
+  - `DBROOT0X_USERNAME`: the root username for secondary `mongod` instances
+  - `S3ROOT_USERNAME`: the root user for the minIO instance
+  - `S3ROOT_PASSWORD`: the root password for the minIO instance 
+  - `JWT_SECRET_KEY`: the secret key for signing tokens produced by the API server
+  - `DBSHARD_KEYFILE`: the key file for the `mongod` replica set
 - The secrets are not checked into version control for security reasons
 
 ### Files
 
-The `etc/` subdirectory contains the configuration files for the data services. Currently there is only one file for the `mongod` server process. It is recommended to leave it as is so that docker can find it and create a sane mongoDB instance.
+The `etc/` subdirectory contains the configuration files for the data services. Currently there is one file for each `mongod` server process in a replica set. It is recommended to create additional configuration files based on existing copies.
