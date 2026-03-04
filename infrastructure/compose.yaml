@@ -1,19 +1,55 @@
 services:
-  tbyte-devdb:
-    image: mongo:latest
-    command: --config /etc/mongo/mongod.conf
+  mongodb01:
+    image: mongo:8.2-rc
+    command: --config /etc/mongo/mongod01.conf
+    hostname: mongodb01.tournabyte.com
     restart: no
     ports:
       - 27017:27017
     volumes:
       - ./etc:/etc/mongo:ro
-      - db_data:/data/db
+      - db_disk_01:/data/db
     secrets:
-      - mongo_root_user
-      - mongo_root_pass
+      - mongodb01_root_user
+      - mongodb01_root_pass
+      - mongo_cluster_keyfile
     environment:
-      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/mongo_root_pass
-      MONGO_INITDB_ROOT_USERNAME_FILE: /run/secrets/mongo_root_user
+      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/mongodb01_root_pass
+      MONGO_INITDB_ROOT_USERNAME_FILE: /run/secrets/mongodb01_root_user
+  mongodb02:
+    image: mongo:8.2-rc
+    hostname: mongodb02.tournabyte.com
+    command: --config /etc/mongo/mongod02.conf
+    restart: no
+    ports:
+      - 27018:27017
+    volumes:
+      - ./etc:/etc/mongo:ro
+      - db_disk_02:/data/db
+    secrets:
+      - mongodb02_root_user
+      - mongodb02_root_pass
+      - mongo_cluster_keyfile
+    environment:
+      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/mongodb02_root_pass
+      MONGO_INITDB_ROOT_USERNAME_FILE: /run/secrets/mongodb02_root_user
+  mongodb03:
+    image: mongo:8.2-rc
+    hostname: mongodb03.tournabyte.com
+    command: --config /etc/mongo/mongod03.conf
+    restart: no
+    ports:
+      - 27019:27017
+    volumes:
+      - ./etc:/etc/mongo:ro
+      - db_disk_03:/data/db
+    secrets:
+      - mongodb03_root_user
+      - mongodb03_root_pass
+      - mongo_cluster_keyfile
+    environment:
+      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/mongodb03_root_pass
+      MONGO_INITDB_ROOT_USERNAME_FILE: /run/secrets/mongodb03_root_user
   tbyte-devS3:
     image: quay.io/minio/minio
     restart: no
@@ -30,13 +66,25 @@ services:
       MINIO_ROOT_USER_FILE: /run/secrets/minio_root_user
       MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_root_pass
 volumes:
-  db_data:
+  db_disk_03:
+  db_disk_02:
+  db_disk_01:
   s3_data:
 secrets:
-  mongo_root_user:
-    file: ./.env/DBROOT_USERNAME.txt
-  mongo_root_pass:
-    file: ./.env/DBROOT_PASSWORD.txt
+  mongo_cluster_keyfile:
+    file: ./.env/DBSHARD_KEYFILE.txt
+  mongodb01_root_user:
+    file: ./.env/DBROOT01_USERNAME.txt
+  mongodb01_root_pass:
+    file: ./.env/DBROOT01_PASSWORD.txt
+  mongodb02_root_user:
+    file: ./.env/DBROOT02_USERNAME.txt
+  mongodb02_root_pass:
+    file: ./.env/DBROOT02_PASSWORD.txt
+  mongodb03_root_user:
+    file: ./.env/DBROOT03_USERNAME.txt
+  mongodb03_root_pass:
+    file: ./.env/DBROOT03_PASSWORD.txt
   minio_root_user:
     file: ./.env/S3ROOT_USERNAME.txt
   minio_root_pass:
