@@ -357,8 +357,8 @@ func TestDirectives(t *testing.T) {
 	directives := Directives(cond1, cond2)
 
 	assert.Len(t, directives, 2)
-	assert.Equal(t, cond1(), directives[0]())
-	assert.Equal(t, cond2(), directives[1]())
+	assert.Equal(t, cond1(), directives[0])
+	assert.Equal(t, cond2(), directives[1])
 }
 
 func TestDirectivesWithEmptySlice(t *testing.T) {
@@ -375,7 +375,7 @@ func TestDirectivesWithSingleItem(t *testing.T) {
 	directives := Directives(cond)
 
 	assert.Len(t, directives, 1)
-	assert.Equal(t, cond(), directives[0]())
+	assert.Equal(t, cond(), directives[0])
 }
 
 func TestConstantsValues(t *testing.T) {
@@ -429,13 +429,13 @@ func TestComplexUpdateCombinations(t *testing.T) {
 
 	assert.Len(t, directives, 3)
 
-	setResult := directives[0]()
+	setResult := directives[0]
 	assert.Equal(t, string(UpdateSetValue), setResult.Key)
 
-	incResult := directives[1]()
+	incResult := directives[1]
 	assert.Equal(t, string(UpdateIncrementValue), incResult.Key)
 
-	mulResult := directives[2]()
+	mulResult := directives[2]
 	assert.Equal(t, string(UpdateMultiplyValue), mulResult.Key)
 }
 
