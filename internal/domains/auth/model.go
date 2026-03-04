@@ -11,6 +11,14 @@ package auth
  *
  */
 
+import "errors"
+
+var (
+	ErrInvalidUserRegistration = errors.New("user cannot register due invalid input data")
+	ErrInvalidSession          = errors.New("session could not be created")
+	ErrWrongCredentials        = errors.New("provided credentials do not match any stored credentials")
+)
+
 // Type `NewUserRequest` represents the minimum details required to create a user account
 //
 // Fields:
@@ -37,10 +45,10 @@ type LoginAttempt struct {
 //
 // Fields:
 //   - ID: the new user ID
+//   - AccessToken: the JSON web token used for authorization to access protected resources
+//   - RefreshToken: the token used for obtaining another access token once the current one has expired
 type AuthenticatedUser struct {
 	ID           string `json:"id"`
-	Email        string `json:"email"`
-	DisplayName  string `json:"displayName"`
 	AccessToken  string `json:"accessToken"`
 	RefreshToken string `json:"refreshToken"`
 }

@@ -39,6 +39,7 @@ func MongoClientFromConfig(cfg *ApplicationOptions) (*utils.DatabaseConnection, 
 		utils.MongoClientAppName("Tournabyte API"),
 		utils.MongoClientCredentials(cfg.Database.Username, cfg.Database.Password),
 		utils.MongoClientHosts(cfg.Database.Hosts...),
+		utils.MongoClientBSONOptions(utils.NilSliceAsEmpty),
 	)
 }
 
@@ -140,10 +141,10 @@ func (srv *TournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
 	authGroup := parentGroup.Group("auth")
 
 	// POST /auth/register
-	authGroup.POST("register", auth.CreateUserHandler(srv.db, srv.sess))
+	authGroup.POST("register", auth.UserRegistrationHandler(srv.db, srv.sess))
 
 	// POST /auth/login
-	authGroup.POST("login", auth.CheckLoginHandler(srv.db, srv.sess))
+	authGroup.POST("login", auth.UserAuthenticationHandler(srv.db, srv.sess))
 
 	// GET /auth/:userid
 	authGroup.GET(

@@ -16,6 +16,8 @@ import (
 	"crypto/tls"
 	"time"
 
+	"github.com/carlmjohnson/truthy"
+	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -1047,7 +1049,7 @@ func merge[T ~func() bson.E](items ...T) bson.D {
 	return itemsList
 }
 
-// Function `Directives[T]` takes a variable number of items that produce `bson.E`s and presents them back as a native go slice
+// Function `Directives[T]` takes a variable number of items that produce `bson.E`s and merges them into a `bson.D`
 // Type Parameters:
 //   - T: a type who's underlying type is a parameterless function returning a `bson.E` instance
 //
@@ -1055,9 +1057,15 @@ func merge[T ~func() bson.E](items ...T) bson.D {
 //   - items...: the items to be included in the resulting slice
 //
 // Returns:
-//   - `[]T` the sequence of items from the argument list presented as a slice
-func Directives[T ~func() bson.E](items ...T) []T {
-	return items
+//   - `bson.D` the sequence of evaluated items collected
+func Directives[T ~func() bson.E](items ...T) bson.D {
+	var itemsList bson.D
+
+	for _, item := range items {
+		itemsList = append(itemsList, item())
+	}
+
+	return itemsList
 }
 
 // Function `defaultFactory` provides a data structure implementing the `DriverClient` interface
@@ -1144,23 +1152,30 @@ func (db *DatabaseConnection) Client() *mongo.Client {
 	return db.client
 }
 
-// Function `DatabaseConnection.WithSession` initiates a client session and executes the sequence of operation functions within the created session
+// Function `DatabaseConnection.SessionCompleted` initiates a client session and executes the sequence of operation functions within the created session
 // Parameters:
 //   - ctx: the context managing the lifetime of the session
 //   - ...ops: sequence of `MongoOperationFunc`s to execute within the session
 //
 // Returns:
-//   - `error`: issue encountered with session or first operation to fail
-func (db *DatabaseConnection) WithSession(ctx context.Context, ops ...MongoOperationFunc) error {
+//   - `bool`: true indicates the session completed without issue, false indicates an issue occurred
+func (db *DatabaseConnection) SessionCompleted(ctx *gin.Context, ops ...MongoOperationFunc) bool {
 	if sess, err := db.Client().StartSession(); err != nil {
-		return err
+		ctx.Error(err)
+		return false
 	} else {
-		defer sess.EndSession(ctx)
+		timeout, cancel := context.WithTimeout(
+			ctx.Request.Context(),
+			truthy.Coalesce(db.options.Timeout, time.Minute),
+		)
+		defer cancel()
+		defer sess.EndSession(timeout)
 		for _, op := range ops {
-			if err := op(ctx, sess.Client()); err != nil {
-				return err
+			if err := op(timeout, sess.Client()); err != nil {
+				ctx.Error(err)
+				return false
 			}
 		}
-		return nil
+		return true
 	}
 }

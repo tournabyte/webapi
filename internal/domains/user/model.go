@@ -14,6 +14,9 @@ package user
 import (
 	"time"
 
+	"github.com/alexedwards/argon2id"
+	"github.com/emvi/iso-639-1"
+	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
@@ -35,6 +38,18 @@ type FullAccountDetails struct {
 	UpdatedAt      time.Time        `bson:"updated_at"`
 }
 
+func NewAccountFromRequest(ctx *gin.Context, email string, displayName string, password string) FullAccountDetails {
+	var account FullAccountDetails
+
+	account.ID = bson.NewObjectID()
+	account.CreatedAt = time.Now().UTC()
+	account.UpdatedAt = account.CreatedAt
+	account.Credentials = SecureCredentialsInRequest(ctx, email, password)
+	account.PrimaryProfile = PopulateProfileInRequest(ctx, displayName)
+
+	return account
+}
+
 // Type `LoginCredentials` stores the unique email and passphrase for an account
 //
 // Fields:
@@ -43,6 +58,18 @@ type FullAccountDetails struct {
 type LoginCredentials struct {
 	Email        string `bson:"email"`
 	PasswordHash string `bson:"password_hash"`
+}
+
+func SecureCredentialsInRequest(ctx *gin.Context, loginID string, loginKey string) LoginCredentials {
+	var creds LoginCredentials
+	hash, err := argon2id.CreateHash(loginKey, argon2id.DefaultParams)
+	if err != nil {
+		ctx.Error(err)
+	}
+
+	creds.Email = loginID
+	creds.PasswordHash = hash
+	return creds
 }
 
 // Type `ActiveSession` stores the refresh token information needed to reauthenticate without user intervention
@@ -57,6 +84,20 @@ type ActiveSession struct {
 	NotValidAfter  time.Time `bson:"not_valid_after"`
 }
 
+func SecureSessionToken(ctx *gin.Context, raw string) ActiveSession {
+	issueTime := time.Now().UTC()
+	hash, err := argon2id.CreateHash(raw, argon2id.DefaultParams)
+	if err != nil {
+		ctx.Error(err)
+	}
+
+	return ActiveSession{
+		TokenHash:      hash,
+		NotValidBefore: issueTime,
+		NotValidAfter:  issueTime.Add(72 * time.Hour),
+	}
+}
+
 // Type `ProfileSettings` stores the language and timezone preferences of an account
 //
 // Fields:
@@ -65,6 +106,13 @@ type ActiveSession struct {
 type ProfileSettings struct {
 	Language string `bson:"language"`
 	Timezone string `bson:"timezone"`
+}
+
+func DefaultProfileSettings() ProfileSettings {
+	return ProfileSettings{
+		Language: iso6391.CodeForName("English"),
+		Timezone: time.UTC.String(),
+	}
 }
 
 // Type `DefaultProfile` stores the default profile information used to create a profile when joining an organization or event
@@ -81,4 +129,15 @@ type PlayerProfile struct {
 	CreatedAt       time.Time       `bson:"created_at"`
 	UpdatedAt       time.Time       `bson:"updated_at"`
 	ClaimedBy       bson.ObjectID   `bson:"claimed_by,omitempty"`
+}
+
+func PopulateProfileInRequest(ctx *gin.Context, displayName string) PlayerProfile {
+	var profile PlayerProfile
+
+	profile.DisplayName = displayName
+	profile.CreatedAt = time.Now().UTC()
+	profile.UpdatedAt = profile.CreatedAt
+	profile.Preferences = DefaultProfileSettings()
+
+	return profile
 }
