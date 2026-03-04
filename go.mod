@@ -4,8 +4,12 @@ go 1.26.0
 
 require (
 	github.com/alexedwards/argon2id v1.0.0
+	github.com/carlmjohnson/truthy v0.23.1
+	github.com/emvi/iso-639-1 v1.1.1
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-jose/go-jose/v4 v4.1.3
+	github.com/go-playground/validator/v10 v10.27.0
+	github.com/google/uuid v1.6.0
 	github.com/minio/minio-go/v7 v7.0.98
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -26,11 +30,9 @@ require (
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/go-playground/validator/v10 v10.27.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
 	github.com/goccy/go-yaml v1.18.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.18.2 // indirect
