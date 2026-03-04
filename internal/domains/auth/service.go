@@ -28,6 +28,14 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
+// Function `Register` instantiates the data records for a new user and prepares it for insertion to the database
+//
+// Parameters:
+//   - ctx: the request context for managing the request lifetime
+//   - src: the data source for the new account date record
+//
+// Returns:
+//   - `utils.MongoOperationFunc`: a closure capable of performing the database insertion operation with the newly instantiated account data records
 func Register(ctx *gin.Context, src *NewUserRequest) utils.MongoOperationFunc {
 	account := user.NewAccountFromRequest(ctx, src.Email, src.DisplayName, src.Password)
 	slog.Debug("New account instance", slog.String("email", src.Email), slog.String("display name", src.DisplayName))
@@ -58,6 +66,17 @@ func Register(ctx *gin.Context, src *NewUserRequest) utils.MongoOperationFunc {
 	}
 }
 
+// Function `Authenticate` creates a closure to validate a login attempt and attach the server-side session details to the appropriate account record
+//
+// Parameters:
+//   - ctx: the context managing the lifetime of the request
+//   - attempt: the client attempt to respond to the authentication challenge
+//   - signer: the signing tool for producing the JWT for later authorization
+//   - oracle: the correct login credentials to compare against the attempt
+//   - dst: the location to write the session token information for client response
+//
+// Returns:
+//   - `utils.MongoOperationFunc`: a closure capable of recording the necessary server-side session information in the database
 func Authenticate(ctx *gin.Context, attempt string, signer jose.Signer, oracle *user.LoginCredentials, dst *AuthenticatedUser) utils.MongoOperationFunc {
 	return func(timeout context.Context, conn *mongo.Client) error {
 
@@ -98,6 +117,16 @@ func Authenticate(ctx *gin.Context, attempt string, signer jose.Signer, oracle *
 	}
 }
 
+// Function `FindLoginDetails` creates a closure to lookup a user's login details based on a unique email address
+//
+// Parameters:
+//   - ctx: the context managing the lifetime of this request
+//   - email: the unique identifier to look up
+//   - creds: the location to decode the discovered login credentials to
+//   - dst: the location to decode the discovered userid to
+//
+// Returns:
+//   - `utils.MongoOperationFunc`: a closure capable of performing the specified lookup and decoding the result
 func FindLoginDetails(ctx *gin.Context, email string, creds *user.LoginCredentials, dst *AuthenticatedUser) utils.MongoOperationFunc {
 	var account user.FullAccountDetails
 
@@ -134,6 +163,16 @@ func FindLoginDetails(ctx *gin.Context, email string, creds *user.LoginCredentia
 	}
 }
 
+// Function `makeSessionTokens` creates the access and refresh tokens associated with a new session
+//
+// Parameters:
+//   - ctx: the context managing the lifetime of the request
+//   - userid: the ID of the user the new session is for
+//   - signer: the signing tool for signing the resulting token
+//
+// Returns:
+//   - `string`: the JWT token portion
+//   - `string`: the refresh token portion
 func makeSessionTokens(ctx *gin.Context, userid string, signer jose.Signer) (string, string) {
 	issueTime := time.Now().UTC()
 	public := jwt.Claims{
@@ -155,6 +194,12 @@ func makeSessionTokens(ctx *gin.Context, userid string, signer jose.Signer) (str
 	return raw, rand.Text()
 }
 
+// Function `passwordMatches` compares the provided raw string to the stored hash string
+//
+// Parameters:
+//   - ctx: the context managing the lifetime of the request
+//   - provided: the raw authentication attempt
+//   - stored: the hashed oracle value
 func passwordMatches(ctx *gin.Context, provided string, stored string) {
 	match, err := argon2id.ComparePasswordAndHash(provided, stored)
 	if err != nil {
