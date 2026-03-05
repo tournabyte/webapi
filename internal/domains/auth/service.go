@@ -105,7 +105,7 @@ func Authenticate(ctx *gin.Context, attempt string, signer jose.Signer, oracle *
 			UpdateByID(
 				timeout,
 				id,
-				bson.M{"$push": bson.M{"active_sessions": session}}, // #TODO: write as composed directive to avoid raw BSON
+				bson.M{"$push": bson.M{"active_sessions": session}},
 				cfg,
 			)
 		if opErr != nil {
@@ -184,7 +184,7 @@ func makeSessionTokens(ctx *gin.Context, userid string, signer jose.Signer) (str
 		NotBefore: jwt.NewNumericDate(issueTime.Add(15 * time.Second)),
 	}
 
-	custom := utils.AuthenticationTokenClaims{
+	custom := AuthorizationTokenClaims{
 		Owner: userid,
 	}
 

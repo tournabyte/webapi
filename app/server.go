@@ -22,6 +22,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-jose/go-jose/v4"
+	"github.com/go-playground/validator/v10"
 	"github.com/tournabyte/webapi/internal/domains/auth"
 	"github.com/tournabyte/webapi/internal/utils"
 )
@@ -88,11 +89,12 @@ func TokenSignerFromConfig(cfg *ApplicationOptions) (jose.Signer, error) {
 //   - sess: the JWT signing tool for authorization checks
 //   - opts: the API configuration options for the API server
 type TournabyteAPIService struct {
-	router *gin.Engine
-	db     *utils.DatabaseConnection
-	s3     *utils.MinioConnection
-	sess   jose.Signer
-	opts   *ApplicationOptions
+	router         *gin.Engine
+	db             *utils.DatabaseConnection
+	s3             *utils.MinioConnection
+	sess           jose.Signer
+	validationFunc *validator.Validate
+	opts           *ApplicationOptions
 }
 
 // Function `NewTournabyteService` creates a tournabyte API server instance for handling incoming requests
@@ -124,11 +126,12 @@ func NewTournabyteService(options *ApplicationOptions) (*TournabyteAPIService, e
 	}
 
 	return &TournabyteAPIService{
-		router: gin.New(),
-		db:     db,
-		s3:     s3,
-		sess:   jwt,
-		opts:   options,
+		router:         gin.New(),
+		db:             db,
+		s3:             s3,
+		sess:           jwt,
+		validationFunc: validator.New(),
+		opts:           options,
 	}, nil
 
 }
@@ -167,8 +170,11 @@ func (srv *TournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
 	// GET /auth/:userid
 	authGroup.GET(
 		"/:userid",
-		utils.VerifyAuthorization(
-			[]byte(srv.opts.Serve.Sessions.PrivateKey),
+		auth.CheckAuthorizationHeaderHandler(
+			srv.opts.Serve.Sessions.PrivateKey,
+			srv.opts.Serve.Sessions.Issuer,
+			srv.opts.Serve.Sessions.Subject,
+			srv.validationFunc,
 			jose.SignatureAlgorithm(srv.opts.Serve.Sessions.Algorithm),
 		),
 		func(ctx *gin.Context) {
@@ -181,8 +187,8 @@ func (srv *TournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
 				ctx.AbortWithStatusJSON(400, gin.H{"msg": err.Error()})
 				return
 			}
-			if r.ID != ctx.GetString(utils.AuthorizationClaims) {
-				slog.ErrorContext(ctx, "Could not validate authorization claims", utils.AuthorizationClaims, ctx.GetString(utils.AuthorizationClaims))
+			if r.ID != ctx.GetString(auth.AuthorizationClaims) {
+				slog.ErrorContext(ctx, "Could not validate authorization claims", auth.AuthorizationClaims, ctx.GetString(auth.AuthorizationClaims))
 				ctx.AbortWithStatusJSON(401, gin.H{"msg": "Unauthorized"})
 				return
 			}
