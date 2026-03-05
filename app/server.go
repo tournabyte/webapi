@@ -74,7 +74,7 @@ func TokenSignerFromConfig(cfg *ApplicationOptions) (jose.Signer, error) {
 	return jose.NewSigner(
 		jose.SigningKey{
 			Algorithm: jose.SignatureAlgorithm(cfg.Serve.Sessions.Algorithm),
-			Key:       []byte(cfg.Serve.Sessions.PrivateKey),
+			Key:       []byte(cfg.Serve.Sessions.SigningKey),
 		},
 		nil,
 	)
@@ -171,7 +171,7 @@ func (srv *TournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
 	authGroup.GET(
 		"/:userid",
 		auth.CheckAuthorizationHeaderHandler(
-			srv.opts.Serve.Sessions.PrivateKey,
+			srv.opts.Serve.Sessions.SigningKey,
 			srv.opts.Serve.Sessions.Issuer,
 			srv.opts.Serve.Sessions.Subject,
 			srv.validationFunc,
@@ -224,11 +224,11 @@ func (srv *TournabyteAPIService) Run() error {
 
 	go func() {
 		slog.Info("Starting API server on", slog.Int("port", int(srv.opts.Serve.Port)))
-		slog.Debug("Using TLS: ", slog.Bool("useTLS", srv.opts.Serve.UseTLS))
+		slog.Debug("Security options ", slog.Bool("using TLS", srv.opts.Serve.Security.TLSEnabled))
 		var startupError error
 
-		if srv.opts.Serve.UseTLS {
-			startupError = server.ListenAndServeTLS(srv.opts.Serve.CertFile, srv.opts.Serve.KeyFile)
+		if srv.opts.Serve.Security.TLSEnabled {
+			startupError = server.ListenAndServeTLS(srv.opts.Serve.Security.Certificate, srv.opts.Serve.Security.Keychain)
 		} else {
 			startupError = server.ListenAndServe()
 		}

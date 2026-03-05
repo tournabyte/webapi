@@ -74,13 +74,12 @@ func initAppContext(cmd *cobra.Command, args []string) error {
 	if err := appConfig.PopulateFromFile(); err != nil {
 		return err
 	}
-	if cfg, err := appConfig.UnmarshalOptions(); err != nil {
+	if err := appConfig.UnmarshalOptions(); err != nil {
 		return err
 	} else {
-		if err := initLogs(cfg.Log...); err != nil {
+		if err := initLogs(appOpts.Log...); err != nil {
 			return err
 		}
-		setAppOpts(cfg)
 	}
 
 	return nil
@@ -93,7 +92,7 @@ func initAppContext(cmd *cobra.Command, args []string) error {
 func doServe(cmd *cobra.Command, args []string) error {
 
 	slog.Info("Starting application", slog.String("cmd", cmd.Name()), slog.Any("args", args))
-	app, err := NewTournabyteService(GetAppOpts())
+	app, err := NewTournabyteService(appOpts)
 	if err != nil {
 		return err
 	}

@@ -13,9 +13,13 @@ package app
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"reflect"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/pflag"
@@ -23,25 +27,7 @@ import (
 )
 
 // Variable `appOpts` holds the unmarshalled application configuration singleton
-var appOpts *ApplicationOptions = nil
-
-// Function `setAppOpts` sets the value of the `appOpts` singleton variable for use throughout the application
-//
-// Parameters:
-//   - opts: pointer to the application options instance to use
-func setAppOpts(opts *ApplicationOptions) {
-	slog.Debug("Application options singleton set", slog.Any("opts", *opts))
-	appOpts = opts
-}
-
-// Function `GetAppOpts` retrieves the value of the `appOpts` singleton variable
-//
-// Returns:
-//   - `*ApplicationOptions`: pointer to the `appOpts` singleton
-func GetAppOpts() *ApplicationOptions {
-	slog.Debug("Application options singleton requested", slog.Any("opts", *appOpts))
-	return appOpts
-}
+var appOpts *ApplicationOptions = &ApplicationOptions{}
 
 // Type `ApplicationOptions` represents the configuration file structure using go struct syntax
 //
@@ -56,6 +42,143 @@ type ApplicationOptions struct {
 	Filestore filestoreOptions `mapstructure:"minio"`
 }
 
+// Function `resolveFiles` recursively resolves the fields tagged with the `fromfile` tag by treating the existing value as a filepath and overwriting the value with the file's contents
+//
+// Parameters:
+//   - v: the structure to walk recursively and revolve files of
+//
+// Returns:
+//   - `error`: issue that occurred during file resolution (nil if no issue occurred)
+func resolveFiles(v any) error {
+	val := reflect.ValueOf(v)
+
+	if val.Kind() != reflect.Pointer {
+		return errors.New("pointer required to resolve file-like fields")
+	}
+
+	return resolve(val.Elem())
+}
+
+// Function `resolve` replaces the given value (which should be a filepath) with the file's contents
+//
+// Parameters:
+//   - val: the value to resolve
+//
+// Returns:
+//   - `error`: issue that occurred during resolution (nil if no issue occurred)
+func resolve(val reflect.Value) error {
+	if val.Kind() != reflect.Struct {
+		return nil
+	}
+
+	t := val.Type()
+	for i := 0; i < val.NumField(); i++ {
+		field := val.Field(i)
+		fieldT := t.Field(i)
+
+		if tag, exists := fieldT.Tag.Lookup("fromfile"); exists {
+			var required bool
+			var mode os.FileMode
+
+			if r, m, err := parseFromFileTag(tag); err != nil {
+				return err
+			} else {
+				required = *r
+				mode = *m
+			}
+
+			if field.Kind() != reflect.String {
+				return errors.New("can only resolve fields of type string")
+			}
+
+			path := field.String()
+			if info, err := os.Stat(path); err != nil {
+				if os.IsNotExist(err) && !required {
+					return nil
+				}
+				return err
+			} else {
+				perms := info.Mode().Perm()
+
+				if perms > mode {
+					return fmt.Errorf("permissions on `%s` are too open (expected <= %o)", path, mode)
+				}
+			}
+
+			if data, err := os.ReadFile(path); err != nil {
+				return err
+			} else {
+				field.SetString(string(data))
+				continue
+			}
+		}
+
+		switch field.Kind() {
+		case reflect.Struct:
+			if err := resolve(field); err != nil {
+				return err
+			}
+
+		case reflect.Pointer:
+			if !field.IsNil() && field.Elem().Kind() == reflect.Struct {
+				if err := resolve(field); err != nil {
+					return err
+				}
+			}
+
+		case reflect.Slice, reflect.Array:
+			for j := 0; j < field.Len(); j++ {
+				elem := field.Index(j)
+				if elem.Kind() == reflect.Struct {
+					if err := resolve(elem); err != nil {
+						return err
+					}
+				}
+
+				if elem.Kind() == reflect.Pointer && elem.Elem().Kind() == reflect.Struct {
+					if err := resolve(elem.Elem()); err != nil {
+						return err
+					}
+				}
+			}
+		}
+
+	}
+
+	return nil
+}
+
+// Function `parseFromFileTag` parses the given tag and extracts the required and file mode information contained within it
+//
+// Parameters:
+//   - tag: the tag to parse
+//
+// Returns:
+//   - `*bool`: whether or not the file path must exists
+//   - `*os.FileMode`: the minimum permission allowed for the file
+//   - `error`: issue that occurred during parsing (nil if no issue occurred)
+func parseFromFileTag(tag string) (*bool, *os.FileMode, error) {
+	var required bool = false
+	var mode os.FileMode
+	var parseErr error = nil
+
+	for part := range strings.SplitSeq(tag, ",") {
+		part = strings.TrimSpace(part)
+		switch {
+		case part == "required":
+			required = true
+		case strings.HasPrefix(part, "perm="):
+			if val, err := strconv.ParseUint(strings.TrimPrefix(part, "perm="), 8, 32); err != nil {
+				parseErr = err
+			} else {
+				mode = os.FileMode(val)
+			}
+		}
+	}
+
+	return &required, &mode, parseErr
+}
+
 // Type `serviceOptions` represents the webapi server options component of the configuration file structure
 //
 // Struct members:
@@ -65,20 +188,24 @@ type ApplicationOptions struct {
 //   - KeyFile: path to the keychain file for HTTPS operation
 //   - Tokens: options supporting the web token capabilities of the server
 type serviceOptions struct {
-	Port     uint        `mapstructure:"port"`
-	UseTLS   bool        `mapstructure:"useTLS"`
-	CertFile string      `mapstructure:"certificateFile"`
-	KeyFile  string      `mapstructure:"keychainFile"`
-	Sessions sessionOpts `mapstructure:"sessions"`
+	Port     uint            `mapstructure:"port"`
+	Security securityOptions `mapstructure:"security"`
+	Sessions sessionOpts     `mapstructure:"sessions"`
 }
 
 type sessionOpts struct {
 	Algorithm       string        `mapstructure:"signingAlgorithm"`
-	PrivateKey      string        `mapstructure:"signingKey"`
-	AccessTokenTTL  time.Duration `mapstructure:"acessTokenTTL"`
+	SigningKey      string        `mapstructure:"signingKeyFile" fromfile:"required,perm=0600"`
+	AccessTokenTTL  time.Duration `mapstructure:"accessTokenTTL"`
 	RefreshTokenTTL time.Duration `mapstructure:"refreshTokenTTL"`
 	Issuer          string        `mapstructure:"tokenIssuer"`
 	Subject         string        `mapstructure:"tokenSubject"`
+}
+
+type securityOptions struct {
+	TLSEnabled  bool   `mapstructure:"useTLS"`
+	Certificate string `mapstructure:"certificateFile" fromfile:"required,perm=0400"`
+	Keychain    string `mapstructure:"keychainFile" fromfile:"required,perm=0400"`
 }
 
 // Type `databaseOptions` represents the webapi database options component of the configuration file structure
@@ -90,7 +217,7 @@ type sessionOpts struct {
 type databaseOptions struct {
 	Hosts    []string `mapstructure:"hosts"`
 	Username string   `mapstructure:"username"`
-	Password string   `mapstructure:"password"`
+	Password string   `mapstructure:"password" fromfile:"required,perm=0600"`
 }
 
 // Type `filestoreOptions` represents the webapi file storage options component of the configuration file structure
@@ -101,8 +228,8 @@ type databaseOptions struct {
 //   - SecretKey: the key used to respond to authentication challenges from the file storage service
 type filestoreOptions struct {
 	Endpoint  string `mapstructure:"endpoint"`
-	AccessKey string `mapstructure:"accessKey"`
-	SecretKey string `mapstructure:"secretKey"`
+	AccessKey string `mapstructure:"accessKey" fromfile:"required,perm=0600"`
+	SecretKey string `mapstructure:"secretKey" fromfile:"required,perm=0600"`
 }
 
 // Type `loggingOptions` represents the webapi structured logging options component of the configuration file structure
@@ -254,14 +381,16 @@ func (cfg *AppConfig) PopulateFromFlagset(flags *pflag.FlagSet, renames map[stri
 // Function `(*AppConfig).UnmarshalOptions` attempts to map the internal viper config to a `ApplicationOptions` instance
 //
 // Returns
-//   - `*ApplicationOptions`: pointer to the successfully unmarshalled options structure
 //   - `error`: error indicating a failure when unmarshalling (nil if unmarshalled successfully)
-func (cfg *AppConfig) UnmarshalOptions() (*ApplicationOptions, error) {
+func (cfg *AppConfig) UnmarshalOptions() error {
 	slog.Debug("Unmarshalling configuration options...")
-	var options ApplicationOptions
-	if err := cfg.Opts.Unmarshal(&options); err != nil {
+	if err := cfg.Opts.Unmarshal(appOpts); err != nil {
 		slog.Error("Could not unmarshall configuration", slog.String("reason", err.Error()))
-		return nil, err
+		return err
 	}
-	return &options, nil
+	if err := resolveFiles(appOpts); err != nil {
+		slog.Error("Could not resolve configuration file paths with their contents", slog.String("reason", err.Error()))
+		return err
+	}
+	return nil
 }

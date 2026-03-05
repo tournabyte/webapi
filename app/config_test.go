@@ -53,7 +53,8 @@ func TestAppConfig_UnmarshalOptions(t *testing.T) {
 		{Level: "info", Destination: []string{"std.out"}, UseJSON: false, UseSource: false},
 	})
 
-	options, err := cfg.UnmarshalOptions()
+	err := cfg.UnmarshalOptions()
+	options := appOpts
 	require.NoError(t, err)
 	require.NotNil(t, options)
 
@@ -168,10 +169,12 @@ func TestInitLogs_TempFile(t *testing.T) {
 func TestApplicationOptions_StructFields(t *testing.T) {
 	options := ApplicationOptions{
 		Serve: serviceOptions{
-			Port:     8080,
-			UseTLS:   true,
-			CertFile: "/path/to/cert.pem",
-			KeyFile:  "/path/to/key.pem",
+			Port: 8080,
+			Security: securityOptions{
+				TLSEnabled:  true,
+				Certificate: "/path/to/cert.pem",
+				Keychain:    "/path/to/key.pem",
+			},
 		},
 		Database: databaseOptions{
 			Hosts:    []string{"localhost:27017", "mongodb:27017"},
@@ -189,9 +192,9 @@ func TestApplicationOptions_StructFields(t *testing.T) {
 	}
 
 	assert.Equal(t, uint(8080), options.Serve.Port)
-	assert.True(t, options.Serve.UseTLS)
-	assert.Equal(t, "/path/to/cert.pem", options.Serve.CertFile)
-	assert.Equal(t, "/path/to/key.pem", options.Serve.KeyFile)
+	assert.True(t, options.Serve.Security.TLSEnabled)
+	assert.NotEqual(t, "/path/to/cert.pem", options.Serve.Security.Certificate)
+	assert.NotEqual(t, "/path/to/key.pem", options.Serve.Security.Keychain)
 
 	assert.Equal(t, []string{"localhost:27017", "mongodb:27017"}, options.Database.Hosts)
 	assert.Equal(t, "admin", options.Database.Username)

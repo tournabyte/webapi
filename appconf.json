@@ -2,14 +2,20 @@
   "serve": {
     "port": "3000",
     "useTLS": false,
-    "tokenOptions": {
+    "sessions": {
       "signingAlgorithm": "HS256",
-      "signingKey": "c46c35c4a74485b9539e74a57182ac0aabaf909d5ae62dc0eb6f7d4f1f1d72cc"
+      "signingKey": "c46c35c4a74485b9539e74a57182ac0aabaf909d5ae62dc0eb6f7d4f1f1d72cc",
+      "accessTokenTTL": "15m",
+      "refreshTokenTTL": "72h",
+      "tokenIssuer": "api.tournabyte.com",
+      "tokenSubject": "Tournabate API authorization"
     }
   },
   "mongodb": {
     "hosts": [
-      "127.0.0.1:27017"
+      "mongodb01.tournabyte.com",
+      "mongodb02.tournabyte.com",
+      "mongodb03.tournabyte.com"
     ],
     "username": "mongoadmin",
     "password": "v8Bscn-SUedmIQ1NDF9664uBNoMG30xstO25u43-PTiYHLBFkcIH_yATCHQBM-eLIYB47u3WbZOajWHiJshSZQ"
