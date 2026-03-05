@@ -137,7 +137,10 @@ func FindLoginDetails(ctx *gin.Context, email string, creds *user.LoginCredentia
 		}
 
 		cfg, cfgErr := utils.FindOneOptsWith(
-			utils.FindOneProjectSpec(utils.Retain("login_credentials"), utils.Retain("_id")),
+			utils.FindOneProjectSpec(
+				bson.E{Key: "login_credentials", Value: true},
+				bson.E{Key: "_id", Value: true},
+			),
 		)
 		if cfgErr != nil {
 			return cfgErr
@@ -148,9 +151,7 @@ func FindLoginDetails(ctx *gin.Context, email string, creds *user.LoginCredentia
 			Collection(`users`).
 			FindOne(
 				timeout,
-				utils.Directives(
-					utils.Eq("login_credentials.email", email),
-				),
+				bson.D{bson.E{Key: "login_credentials.email", Value: email}},
 				cfg,
 			).Decode(&account)
 		if opErr != nil {
