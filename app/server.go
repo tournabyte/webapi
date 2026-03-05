@@ -72,8 +72,8 @@ func MinioClientFromConfig(cfg *ApplicationOptions) (*utils.MinioConnection, err
 func TokenSignerFromConfig(cfg *ApplicationOptions) (jose.Signer, error) {
 	return jose.NewSigner(
 		jose.SigningKey{
-			Algorithm: jose.SignatureAlgorithm(cfg.Serve.Tokens.Algorithm),
-			Key:       []byte(cfg.Serve.Tokens.PrivateKey),
+			Algorithm: jose.SignatureAlgorithm(cfg.Serve.Sessions.Algorithm),
+			Key:       []byte(cfg.Serve.Sessions.PrivateKey),
 		},
 		nil,
 	)
@@ -133,6 +133,24 @@ func NewTournabyteService(options *ApplicationOptions) (*TournabyteAPIService, e
 
 }
 
+// Function `(*TournabyteAPIService).addGlobalMiddleware` setups the base handler chain to respond to any requests received
+func (srv *TournabyteAPIService) addGlobalMiddleware() {
+	srv.router.Use(gin.CustomRecovery(
+		func(ctx *gin.Context, err any) {
+			if err != nil {
+				switch err := err.(type) {
+				case error:
+					slog.Error("Recovering from error panic", slog.String("error", err.Error()))
+					utils.RespondWithError(ctx, err)
+				default:
+					slog.Error("Recovering from non error panic")
+					utils.RespondWithError(ctx, utils.ErrUndisclosedHandlerFailure)
+				}
+			}
+		},
+	))
+}
+
 // Function `(*TournabyteAPIService).addAuthGroup` setups the handler chains to respond to requests on the `/auth/` endpoint group
 //
 // Parameters:
@@ -150,8 +168,8 @@ func (srv *TournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
 	authGroup.GET(
 		"/:userid",
 		utils.VerifyAuthorization(
-			[]byte(srv.opts.Serve.Tokens.PrivateKey),
-			jose.SignatureAlgorithm(srv.opts.Serve.Tokens.Algorithm),
+			[]byte(srv.opts.Serve.Sessions.PrivateKey),
+			jose.SignatureAlgorithm(srv.opts.Serve.Sessions.Algorithm),
 		),
 		func(ctx *gin.Context) {
 			type R struct {
@@ -175,7 +193,7 @@ func (srv *TournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
 
 // Function `(*TournabyteAPIService).RegisterRoutes` initializes the underlying engine with the appropriate routes for service
 func (srv *TournabyteAPIService) RegisterRoutes() {
-	srv.router.Use(utils.ErrorRecovery())
+	srv.addGlobalMiddleware()
 
 	{
 		// /v1/...

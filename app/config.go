@@ -16,6 +16,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -64,16 +65,20 @@ type ApplicationOptions struct {
 //   - KeyFile: path to the keychain file for HTTPS operation
 //   - Tokens: options supporting the web token capabilities of the server
 type serviceOptions struct {
-	Port     uint                `mapstructure:"port"`
-	UseTLS   bool                `mapstructure:"useTLS"`
-	CertFile string              `mapstructure:"certificateFile"`
-	KeyFile  string              `mapstructure:"keychainFile"`
-	Tokens   tokenSigningOptions `mapstructure:"tokenOptions"`
+	Port     uint        `mapstructure:"port"`
+	UseTLS   bool        `mapstructure:"useTLS"`
+	CertFile string      `mapstructure:"certificateFile"`
+	KeyFile  string      `mapstructure:"keychainFile"`
+	Sessions sessionOpts `mapstructure:"sessions"`
 }
 
-type tokenSigningOptions struct {
-	Algorithm  string `mapstructure:"signingAlgorithm"`
-	PrivateKey string `mapstructure:"signingKey"`
+type sessionOpts struct {
+	Algorithm       string        `mapstructure:"signingAlgorithm"`
+	PrivateKey      string        `mapstructure:"signingKey"`
+	AccessTokenTTL  time.Duration `mapstructure:"acessTokenTTL"`
+	RefreshTokenTTL time.Duration `mapstructure:"refreshTokenTTL"`
+	Issuer          string        `mapstructure:"tokenIssuer"`
+	Subject         string        `mapstructure:"tokenSubject"`
 }
 
 // Type `databaseOptions` represents the webapi database options component of the configuration file structure
