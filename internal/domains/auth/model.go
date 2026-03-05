@@ -19,6 +19,25 @@ var (
 	ErrWrongCredentials        = errors.New("provided credentials do not match any stored credentials")
 )
 
+// Constant `AuthorizationClaims` represents the context key to retrieve the owner ID of the access token included with a request
+const AuthorizationClaims = "AuthorizedID"
+
+// Type `AuthorizationTokenClaims` represents the custom claims present in a JWT produced by the Tournabyte API
+//
+// Fields:
+//   - Owner: private claim expected to be the userID of the account this token was issued to
+type AuthorizationTokenClaims struct {
+	Owner string `json:"owner" validate:"required,mongodb"`
+}
+
+// Type `AuthorizationHeaderContent` represents a key:value pair specifically for the HTTP Authorization header
+//
+// Fields:
+//   - Token: JWT value given as part of the HTTP authorization header
+type AuthorizationHeaderContent struct {
+	Token string `header:"Authorization" binding:"required"`
+}
+
 // Type `NewUserRequest` represents the minimum details required to create a user account
 //
 // Fields:

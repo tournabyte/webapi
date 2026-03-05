@@ -52,6 +52,7 @@ func (f HandlerFuncFailure) Error() string {
 const (
 	failedToBindBodyMsg       = "request body malformed"
 	failedToBindURIMsg        = "request URI malformed"
+	failedToBindHeadersMsg    = "request headers malformed"
 	failedLoginMsg            = "invalid login credentials presented"
 	failedAuthVerificationMsg = "invalid authorization presented"
 	failedToReachUpstreamData = "upstream data service not available"
@@ -63,6 +64,7 @@ const (
 var (
 	ErrCouldNotBindRequestBody       = NewHandlerFuncFailure(http.StatusBadRequest, failedToBindBodyMsg)
 	ErrCouldNotBindRequestParameters = NewHandlerFuncFailure(http.StatusBadRequest, failedToBindURIMsg)
+	ErrCouldNotBindRequestHeaders    = NewHandlerFuncFailure(http.StatusBadRequest, failedToBindHeadersMsg)
 	ErrInvalidLoginAttempt           = NewHandlerFuncFailure(http.StatusUnauthorized, failedLoginMsg)
 	ErrInvalidAuthorizationToken     = NewHandlerFuncFailure(http.StatusForbidden, failedAuthVerificationMsg)
 	ErrUpstreamDataUnavailable       = NewHandlerFuncFailure(http.StatusBadGateway, failedToReachUpstreamData)

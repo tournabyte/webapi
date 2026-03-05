@@ -101,3 +101,19 @@ func DidBindURI(ctx *gin.Context, dst any) bool {
 	}
 	return true
 }
+
+// Function `DidBindHeaders` attempts to bind the request headers section to the specified struct
+//
+// Parameters:
+//   - ctx: the context containing the request headers
+//   - dst: the location to decode the header values to
+//
+// Returns:
+//   - `bool`: value indicating whether the binding process succeeded or not
+func DidBindHeaders(ctx *gin.Context, dst any) bool {
+	if err := ctx.ShouldBindHeader(dst); err != nil {
+		ctx.Error(err)
+		return false
+	}
+	return true
+}

@@ -22,6 +22,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
+	"github.com/go-playground/validator/v10"
 	"github.com/tournabyte/webapi/internal/domains/user"
 	"github.com/tournabyte/webapi/internal/utils"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -208,4 +209,82 @@ func passwordMatches(ctx *gin.Context, provided string, stored string) {
 	if !match {
 		ctx.Error(ErrWrongCredentials)
 	}
+}
+
+// Function `parsedAuthorizationToken` parses the signed JWT and writes the parsed data to the specified address
+//
+// Parameters:
+//   - ctx: the context managing the lifetime of the request
+//   - raw: the raw token to parse
+//   - dst: the location to write the parsed token to
+//   - algorithms...: the signing algorithms to try
+//
+// Returns:
+//   - `bool`: value indicating whether the parsing process succeeded or not
+func parsedAuthorizationToken(ctx *gin.Context, raw string, dst *jwt.JSONWebToken, algorithms ...jose.SignatureAlgorithm) bool {
+	var parsingError error
+	dst, parsingError = jwt.ParseSigned(raw, algorithms)
+
+	if parsingError != nil {
+		ctx.Error(parsingError)
+		return false
+	}
+	return true
+}
+
+// Function `decodedTokenClaims` decodes the given JWT claims into the sequence of specified addresses
+//
+// Parameters:
+//   - ctx: the context managing the lifetime of the request
+//   - token: the token whose claims should be decoded
+//   - key: the secret key for decoding token claims
+//   - addrs: locations to decode claims to
+//
+// Returns:
+//   - `bool`: value indicating whether the claim decoding process succeeded or not
+func decodedTokenClaims(ctx *gin.Context, token *jwt.JSONWebToken, key []byte, addrs ...any) bool {
+	if err := token.Claims(key, addrs); err != nil {
+		ctx.Error(err)
+		return false
+	}
+	return true
+}
+
+// Function `validPublicClaims` validates the utilized public JWT claims match the expected values
+//
+// Parameters:
+//   - ctx: the context manaing the lifetime of the request
+//   - claims: the JWT claims to validate
+//   - expectedSubject: the expected value for the `sub` field
+//   - expectedIssuer: the expected value for the `iss` field
+//
+// Returns:
+//   - `bool`: value indicating whether claim validation succeeded or not
+func validPublicClaims(ctx *gin.Context, claims *jwt.Claims, expectedSubject string, expectedIssuer string) bool {
+	expected := jwt.Expected{
+		Issuer:  expectedIssuer,
+		Subject: expectedSubject,
+	}
+	if err := claims.Validate(expected); err != nil {
+		ctx.Error(err)
+		return false
+	}
+	return true
+}
+
+// Function `validCustomClaims` validates the custom claims decoded from a JWT against a validator
+//
+// Parameters:
+//   - ctx: the context managing the lifetime of the request
+//   - claims: the JWT claims to validate
+//   - validatorFunc: custom validation logic
+//
+// Returns:
+//   - `bool`: value indicating whether claim validation succeeded or not
+func validCustomClaims(ctx *gin.Context, claims any, validatorFunc *validator.Validate) bool {
+	if err := validatorFunc.Struct(claims); err != nil {
+		ctx.Error(err)
+		return false
+	}
+	return true
 }
