@@ -28,7 +28,6 @@ import (
 func setupResponseTestRouter() *gin.Engine {
 	router := gin.New()
 
-	router.Use(ErrorRecovery())
 	router.GET("/ok", func(ctx *gin.Context) {
 		RespondWithRequestedData(ctx, gin.H{"someData": 5}, http.StatusOK)
 	})
@@ -45,7 +44,6 @@ func setupResponseTestRouter() *gin.Engine {
 func setupBindingTestRouter() *gin.Engine {
 	router := gin.New()
 
-	router.Use(ErrorRecovery())
 	router.GET("/items/:id", func(ctx *gin.Context) {
 		params := struct {
 			ID string `uri:"id" binding:"required,mongodb"`

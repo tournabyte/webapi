@@ -448,13 +448,13 @@ const (
 
 // Function `FindProjectSpec` provides the FindOperationOption to specify fields to keep/discard in a find operation
 // Parameters:
-//   - specs: fields to keep or discard
+//   - selectors: fields to keep or discard
 //
 // Returns:
 //   - `FindOperationOption`: closure to set the given `options.FindOptionsBuilder` instance's projection setting
-func FindProjectSpec(selectors ...projectionSelector) FindOperationOption {
+func FindProjectSpec(selectors ...bson.E) FindOperationOption {
 	return func(opts *options.FindOptionsBuilder) error {
-		opts.SetProjection(merge(selectors...))
+		opts.SetProjection(mergeToMap(selectors...))
 		return nil
 	}
 }
@@ -491,9 +491,9 @@ func FindResultLimit(limit int64) FindOperationOption {
 //
 // Returns:
 //   - `FindOperationOption`: closure to set the given `options.FindOptionsBuilder` instance's sort setting
-func FindSortKey(sortBy ...sortKey) FindOperationOption {
+func FindSortKey(sortBy ...bson.E) FindOperationOption {
 	return func(opts *options.FindOptionsBuilder) error {
-		opts.SetSort(merge(sortBy...))
+		opts.SetSort(mergeToSeq(sortBy...))
 		return nil
 	}
 }
@@ -504,9 +504,9 @@ func FindSortKey(sortBy ...sortKey) FindOperationOption {
 //
 // Returns:
 //   - `FindOneOperationOption`: closure to set the given `options.FindOneOptionsBuilder` instance's projection setting
-func FindOneProjectSpec(selectors ...projectionSelector) FindOneOperationOption {
+func FindOneProjectSpec(selectors ...bson.E) FindOneOperationOption {
 	return func(opts *options.FindOneOptionsBuilder) error {
-		opts.SetProjection(merge(selectors...))
+		opts.SetProjection(mergeToMap(selectors...))
 		return nil
 	}
 }
@@ -530,9 +530,9 @@ func FindOneOffset(skip int64) FindOneOperationOption {
 //
 // Returns:
 //   - `FindOneOperationOption`: closure to set the given `options.FindOneOptionsBuilder` instance's sort setting
-func FindOneSortKey(sortBy ...sortKey) FindOneOperationOption {
+func FindOneSortKey(sortBy ...bson.E) FindOneOperationOption {
 	return func(opts *options.FindOneOptionsBuilder) error {
-		opts.SetSort(merge(sortBy...))
+		opts.SetSort(mergeToSeq(sortBy...))
 		return nil
 	}
 }
@@ -608,13 +608,9 @@ func DoInsertsOnNoMatchFound(upsert bool) UpdateOperationOption {
 //
 // Returns:
 //   - `UpdateOperationOption`: closure to set the given `options.UpdateManyOptionsBuilder` array filter setting
-func UpdateArrayElementFilter(filters ...filterCondition) UpdateOperationOption {
+func UpdateArrayElementFilter(filters ...any) UpdateOperationOption {
 	return func(opts *options.UpdateManyOptionsBuilder) error {
-		var af []any
-		for _, f := range filters {
-			af = append(af, f())
-		}
-		opts.SetArrayFilters(af)
+		opts.SetArrayFilters(filters)
 		return nil
 	}
 }
@@ -651,421 +647,54 @@ func DoInsertOnNoMatchFound(upsert bool) UpdateOneOperationOption {
 //
 // Returns:
 //   - `UpdateOperationOption`: closure to set the given `options.UpdateOneOptionsBuilder` array filter setting
-func UpdateOneArrayElementFilter(filters ...filterCondition) UpdateOneOperationOption {
+func UpdateOneArrayElementFilter(filters ...any) UpdateOneOperationOption {
 	return func(opts *options.UpdateOneOptionsBuilder) error {
-		var af []any
-		for _, f := range filters {
-			af = append(af, f())
-		}
-		opts.SetArrayFilters(af)
+		opts.SetArrayFilters(filters)
 		return nil
 	}
 }
 
-const (
-	SortAscending  = 1
-	SortDescending = -1
-)
-
-// Enumeration on projection selection states
-const (
-	ProjectionDiscard = 0
-	ProjectionRetain  = 1
-)
-
-// Enumeration of filter condition operators
-const (
-	FilterGreaterThan          = "$gt"
-	FilterGreaterThanOrEqualTo = "$gte"
-	FilterLessThan             = "$lt"
-	FilterLessThanOrEqualTo    = "$lte"
-	FilterValueInArray         = "$in"
-	FilterValueNotInArray      = "$nin"
-	FilterLogicalAnd           = "$and"
-	FilterLogicalOr            = "$or"
-	FilterLogicalNot           = "$not"
-	FilterFieldExists          = "$exists"
-)
-
-// Enumeration of update operator tokens
-const (
-	UpdateSetValue       = "$set"
-	UpdateIncrementValue = "$inc"
-	UpdateDecrementValue = "$dec"
-	UpdateMultiplyValue  = "$mul"
-)
-
-// Type `sortKey` represents a sorting instruction indicating a field and an ordering direction
-type sortKey func() bson.E
-
-// Type `projectionSelector` represents an instruction to include or exclude a field from a result
-type projectionSelector func() bson.E
-
-// Type `filterCondition` represents an condition a document should meet to be included in the result set
-type filterCondition func() bson.E
-
-// Type `updateInstruction` represents an change that should be applied to a matching document
-type updateInstruction func() bson.E
-
-// Function `Asc` creates a sortKey indicating results should be sorted by the named field with lesser items coming before greater items
+// Function `mergeToMap` takes a sequence of `bson.E` instances and turns them into an associative array with chaining duplicate keys
+//
 // Parameters:
-//   - field: the name of the field the sorting should apply to
+//   - elements: the elements to merge
 //
 // Returns:
-//   - `sortKey`: closure for generating the corresponding bson for the mongo-driver
-func Asc(field string) sortKey {
-	return func() bson.E {
-		return bson.E{
-			Key: field, Value: SortAscending,
+//   - `bson.M`: the mapped version of the element sequence
+func mergeToMap(elements ...bson.E) bson.M {
+	var m bson.M = make(bson.M)
+
+	for _, e := range elements {
+		if existing, exists := m[e.Key]; exists {
+			switch v := existing.(type) {
+			case bson.A:
+				m[e.Key] = append(v, e.Value)
+			default:
+				m[e.Key] = bson.A{v, e.Value}
+			}
+		} else {
+			m[e.Key] = e.Value
 		}
 	}
+
+	return m
 }
 
-// Function `Des` creates a sortKey indicating results should be sorted by the named field with greater items coming before lesser items
-// Parameters:
-//   - field: the name of the field the sorting should apply to
-//
-// Returns:
-//   - `sortKey`: closure for generating the corresponding bson for the mongo-driver
-func Des(field string) sortKey {
-	return func() bson.E {
-		return bson.E{
-			Key: field, Value: SortDescending,
-		}
-	}
-}
-
-// Function `Discard` creates a projectionSelector indicating the results should exclude the named field
-// Parameters:
-//   - field: the name of the field to exclude from the results
-//
-// Returns:
-//   - `projectionSelector`: closure for generating the corresponding bson for the mongo-driver
-func Discard(field string) projectionSelector {
-	return func() bson.E {
-		return bson.E{
-			Key: field, Value: ProjectionDiscard,
-		}
-	}
-}
-
-// Function `Retain` creates a projectionSelector indicating the results should include the named field
-// Parameters:
-//   - field: the name of the field to include from the results
-//
-// Returns:
-//   - `projectionSelector`: closure for generating the corresponding bson for the mongo-driver
-func Retain(field string) projectionSelector {
-	return func() bson.E {
-		return bson.E{
-			Key: field, Value: ProjectionRetain,
-		}
-	}
-}
-
-// Function `Eq` creates a filterCondition indicating a document should contain a field with a value matching exactly as specified
-// Parameters:
-//   - field: the name of the field to check for equality
-//   - value: the value to check against to determine equality
-//
-// Returns:
-//   - `filterCondition`: closure for generating the corresponding bson for the mongo-driver
-func Eq(field string, value any) filterCondition {
-	return func() bson.E {
-		return bson.E{
-			Key: field, Value: value,
-		}
-	}
-}
-
-// Function `Gt` creates a filterCondition indicating a document should contain a field with a value that is comparably greater than the value specified
-// Parameters:
-//   - field: the name of the field to check for inequality
-//   - minValue: the value to compare against to determine inequality
-//
-// Returns:
-//   - `filterCondition`: closure for generating the corresponding bson for the mongo-driver
-func Gt(field string, minValue any) filterCondition {
-	return func() bson.E {
-		return bson.E{
-			Key: field, Value: bson.E{
-				Key: FilterGreaterThan, Value: minValue,
-			},
-		}
-	}
-}
-
-// Function `Lt` creates a filterCondition indicating a document should contain a field with a value that is comparably less than the value specified
-// Parameters:
-//   - field: the name of the field to check for inequality
-//   - maxValue: the value to compare against to determine inequality
-//
-// Returns:
-//   - `filterCondition`: closure for generating the corresponding bson for the mongo-driver
-func Lt(field string, maxValue any) filterCondition {
-	return func() bson.E {
-		return bson.E{
-			Key: field, Value: bson.E{
-				Key: FilterLessThan, Value: maxValue,
-			},
-		}
-	}
-}
-
-// Function `Gte` creates a filterCondition indicating a document should contain a field with a value that is comparably greater than or equal to the value specified
-// Parameters:
-//   - field: the name of the field to check for inequality
-//   - minValueIncluded: the value to compare against to determine inequality
-//
-// Returns:
-//   - `filterCondition`: closure for generating the corresponding bson for the mongo-driver
-func Gte(field string, minValueIncluded any) filterCondition {
-	return func() bson.E {
-		return bson.E{
-			Key: field, Value: bson.E{
-				Key: FilterGreaterThanOrEqualTo, Value: minValueIncluded,
-			},
-		}
-	}
-}
-
-// Function `Lte` creates a filterCondition indicating a document should contain a field with a value that is comparably less than or equal to the value specified
-// Parameters:
-//   - field: the name of the field to check for inequality
-//   - maxValueIncluded: the value to compare against to determine inequality
-//
-// Returns:
-//   - `filterCondition`: closure for generating the corresponding bson for the mongo-driver
-func Lte(field string, maxValueIncluded any) filterCondition {
-	return func() bson.E {
-		return bson.E{
-			Key: field, Value: bson.E{
-				Key: FilterLessThanOrEqualTo, Value: maxValueIncluded,
-			},
-		}
-	}
-}
-
-// Function `In` creates a filterCondition indicates a document should contain a field with a value that is contained in the given values list
-// Parameters:
-//   - field: the name of the field to check for inclusion
-//   - values...: the set to compare against to determine inclusion
-//
-// Returns:
-//   - `filterCondition`: closure to generating the corresponding bson for the mongo-driver
-func In(field string, values ...any) filterCondition {
-	return func() bson.E {
-		return bson.E{
-			Key: field, Value: bson.E{
-				Key: FilterValueInArray, Value: values,
-			},
-		}
-	}
-}
-
-// Function `NotIn` creates a filterCondition indicates a document should contain a field with a value that is not contained in the given values list
-// Parameters:
-//   - field: the name of the field to check for exclusion
-//   - values...: the set to compare against to determine exclusion
-//
-// Returns:
-//   - `filterCondition`: closure to generating the corresponding bson for the mongo-driver
-func NotIn(field string, values ...any) filterCondition {
-	return func() bson.E {
-		return bson.E{
-			Key: field, Value: bson.E{
-				Key: FilterValueNotInArray, Value: values,
-			},
-		}
-	}
-}
-
-// Function `And` creates a filterCondition merging an arbitrary number of filterConditions and indicates a document should match ALL of the conditions provided
-// Parameters:
-//   - conditions...: the conditions to merge into a logical and clause
-//
-// Returns:
-//   - `filterCondition`: closure for generating the corresponding bson for the mongo-driver
-func And(conditions ...filterCondition) filterCondition {
-	return func() bson.E {
-		clauses := bson.A{}
-		for _, cond := range conditions {
-			clauses = append(clauses, cond())
-		}
-		return bson.E{
-			Key: FilterLogicalAnd, Value: clauses,
-		}
-	}
-}
-
-// Function `Or` creates a filterCondition merging an arbitrary number of filterConditions and indicates a document should match ANY of the conditions provided
-// Parameters:
-//   - conditions...: the conditions to merge into a logical or clause
-//
-// Returns:
-//   - `filterCondition`: closure for generating the corresponding bson for the mongo-driver
-func Or(conditions ...filterCondition) filterCondition {
-	return func() bson.E {
-		clauses := bson.A{}
-		for _, cond := range conditions {
-			clauses = append(clauses, cond())
-		}
-		return bson.E{
-			Key: FilterLogicalOr, Value: clauses,
-		}
-	}
-}
-
-// Function `Not` creates a filterCondition that inverts the given filterCondition and indicates a document should match the opposite of the condition provided
-// Parameters:
-//   - condition: the condition to logically invert
-//
-// Returns:
-//   - `filterCondition`: closure for generating the corresponding bson for the mongo-driver
-func Not(condition filterCondition) filterCondition {
-	return func() bson.E {
-		return bson.E{
-			Key: FilterLogicalNot, Value: condition(),
-		}
-	}
-}
-
-// Function `Exists` creates a filterCondition that asserts that the given field is part of a document
-// Parameters:
-//   - field: the field that should exist in a document
-//
-// Returns:
-//   - `filterCondition`: closure for generating the corresponding bson for the mongo-driver
-func Exists(field string) filterCondition {
-	return func() bson.E {
-		return bson.E{
-			Key: field, Value: bson.E{
-				Key: FilterFieldExists, Value: true,
-			},
-		}
-	}
-}
-
-// Function `NotExists` creates a filterCondition that asserts that the given field is not part of a document
-// Parameters:
-//   - field: the field that should not exist in a document
-//
-// Returns:
-//   - `filterCondition`: closure for generating the corresponding bson for the mongo-driver
-func NotExists(field string) filterCondition {
-	return func() bson.E {
-		return bson.E{
-			Key: field, Value: bson.E{
-				Key: FilterFieldExists, Value: false,
-			},
-		}
-	}
-}
-
-// Function `Set` creates an updateInstruction that sets the named field to the given value
-// Parameters:
-//   - field: the field that should be updated
-//   - value: the value that should be used for the update
-//
-// Returns:
-//   - `updateInstruction`: closure for generating the corresponding bson for the mongo-driver
-func Set(field string, value any) updateInstruction {
-	return func() bson.E {
-		return bson.E{
-			Key: UpdateSetValue, Value: bson.E{
-				Key: field, Value: value,
-			},
-		}
-	}
-}
-
-// Function `Increment` creates an updateInstruction that increments the named field's value by a given step
-// Parameters:
-//   - field: the field that should be updated
-//   - step: the amount of the increment to take place
-//
-// Returns:
-//   - `updateInstruction`: closure for generating the corresponding bson for the mongo-driver
-func Increment(field string, step any) updateInstruction {
-	return func() bson.E {
-		return bson.E{
-			Key: UpdateIncrementValue, Value: bson.E{
-				Key: field, Value: step,
-			},
-		}
-	}
-}
-
-// Function `Decrement` creates an updateInstruction that decrements the named field's value by a given step
-// Parameters:
-//   - field: the field that should be updated
-//   - step: the amount of the decrement to take place
-//
-// Returns:
-//   - `updateInstruction`: closure for generating the corresponding bson for the mongo-driver
-func Decrement(field string, step any) updateInstruction {
-	return func() bson.E {
-		return bson.E{
-			Key: UpdateDecrementValue, Value: bson.E{
-				Key: field, Value: step,
-			},
-		}
-	}
-}
-
-// Function `Scale` creates an updateInstruction that multiplies the named field's value by a given step
-// Parameters:
-//   - field: the field that should be updated
-//   - step: the level of scale to take place
-//
-// Returns:
-//   - `updateInstruction`: closure for generating the corresponding bson for the mongo-driver
-func Scale(field string, step any) updateInstruction {
-	return func() bson.E {
-		return bson.E{
-			Key: UpdateMultiplyValue, Value: bson.E{
-				Key: field, Value: step,
-			},
-		}
-	}
-}
-
-// Function `merge[T]` takes a variable number of callable items that produce `bson.E`s and merges them into a `bson.D`
-// Type Parameters:
-//   - T: a type who's underlying type is a parameterless function returning a `bson.E` instance
+// Function `mergeToSeq` takes a sequence of `bson.E` elements an orders them into a `bson.D`
 //
 // Parameters:
-//   - items...: the items to be merged
+//   - elements: the elements to merge
 //
 // Returns:
-//   - `bson.D`: the sequence of items collected from the variadic argument
-func merge[T ~func() bson.E](items ...T) bson.D {
-	var itemsList bson.D
+//   - `bson.D`: the ordered sequence of elements
+func mergeToSeq(elements ...bson.E) bson.D {
+	var l bson.D
 
-	for _, item := range items {
-		itemsList = append(itemsList, item())
+	for _, e := range elements {
+		l = append(l, e)
 	}
 
-	return itemsList
-}
-
-// Function `Directives[T]` takes a variable number of items that produce `bson.E`s and merges them into a `bson.D`
-// Type Parameters:
-//   - T: a type who's underlying type is a parameterless function returning a `bson.E` instance
-//
-// Parameters:
-//   - items...: the items to be included in the resulting slice
-//
-// Returns:
-//   - `bson.D` the sequence of evaluated items collected
-func Directives[T ~func() bson.E](items ...T) bson.D {
-	var itemsList bson.D
-
-	for _, item := range items {
-		itemsList = append(itemsList, item())
-	}
-
-	return itemsList
+	return l
 }
 
 // Function `defaultFactory` provides a data structure implementing the `DriverClient` interface
