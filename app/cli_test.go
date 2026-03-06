@@ -1,9 +1,11 @@
 package app
 
 import (
+	"bytes"
 	"log/slog"
 	"os"
 	"testing"
+	"text/template"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -69,29 +71,57 @@ func TestInit(t *testing.T) {
 
 func TestInitAppContext_WithValidConfig(t *testing.T) {
 	// Create a temporary config file for testing
-	tempDir := t.TempDir()
-	tempConfigPath := tempDir + "/appconf.json"
+	etcDir := t.TempDir()
+	configPath := etcDir + "/appconf.json"
+
+	secretsDir := t.TempDir()
+	tokenKeyPath := secretsDir + "/signing_key"
+	dbAccessKey := secretsDir + "/mongo_access_key"
+	s3AccessKey := secretsDir + "/minio_access_key"
+	s3SecretKey := secretsDir + "/minio_secret_key"
+
+	tlsCertKey := secretsDir + "/tls_certificate_file"
+	tlsChainKey := secretsDir + "/tls_keychain_file"
+
+	fdata := map[string]any{
+		"certFile":        tlsCertKey,
+		"chainFile":       tlsChainKey,
+		"jwtkeyFile":      tokenKeyPath,
+		"mongoAccessFile": dbAccessKey,
+		"minioIDFile":     s3AccessKey,
+		"minioKeyFile":    s3SecretKey,
+	}
 
 	configContent := `{
   "serve": {
     "port": "3000",
-    "useTLS": false,
-    "tokenOptions": {
+    "security": {
+      "useTLS": false,
+      "certificateFile": "{{.certFile}}",
+      "keychainFile": "{{.chainFile}}"
+    },
+    "sessions": {
       "signingAlgorithm": "HS256",
-      "signingKey": "jwtkey"
+      "signingKeyFile": "{{.jwtkeyFile}}",
+      "accessTokenTTL": "15m",
+      "refreshTokenTTL": "72h",
+      "tokenIssuer": "example.com",
+      "tokenSubject": "Example Token Subject"
     }
   },
   "mongodb": {
     "hosts": [
-      "127.0.0.1:27017"
+      "mongodb01.tournabyte.com",
+      "mongodb02.tournabyte.com",
+      "mongodb03.tournabyte.com"
     ],
-    "username": "mongoadmin",
-    "password": "mongokey"
+    "username": "mongoadmin01",
+    "password": "{{.mongoAccessFile}}"
   },
   "minio": {
     "endpoint": "localhost:9000",
-    "accessKey": "minioadmin",
-    "secretKey": "miniokey"
+    "accessKey": "{{.minioIDFile}}",
+    "secretKey": "{{.minioKeyFile}}"
   },
   "log": [
     {
@@ -101,31 +131,39 @@ func TestInitAppContext_WithValidConfig(t *testing.T) {
       ],
       "source": false,
       "json": false
-    },
-    {
-      "level": "info",
-      "destination": [
-        "/tmp/log/tournabyte/webapi.log"
-      ],
-      "source": true,
-      "json": false
-    },
-    {
-      "level": "error",
-      "destination": [
-        "/tmp/log/tournabyte/webapi.json"
-      ],
-      "source": true,
-      "json": true
     }
-  ]
+	]
 }`
+	configTemplate, err := template.New("configContent").Parse(configContent)
+	require.NoError(t, err)
 
-	err := os.WriteFile(tempConfigPath, []byte(configContent), 0644)
+	configOutput := new(bytes.Buffer)
+	err = configTemplate.Execute(configOutput, fdata)
+	require.NoError(t, err)
+
+	err = os.WriteFile(configPath, configOutput.Bytes(), 0644)
+	require.NoError(t, err)
+
+	err = os.WriteFile(tokenKeyPath, []byte("token"), 0600)
+	require.NoError(t, err)
+
+	err = os.WriteFile(dbAccessKey, []byte("db"), 0600)
+	require.NoError(t, err)
+
+	err = os.WriteFile(s3AccessKey, []byte("s3ID"), 0600)
+	require.NoError(t, err)
+
+	err = os.WriteFile(s3SecretKey, []byte("s3Key"), 0600)
+	require.NoError(t, err)
+
+	err = os.WriteFile(tlsCertKey, []byte("tls.certificate"), 0400)
+	require.NoError(t, err)
+
+	err = os.WriteFile(tlsChainKey, []byte("tls.keychain"), 0400)
 	require.NoError(t, err)
 
 	// Create a test app config with the temp directory
-	testConfig := NewAppConfig("json", "appconf", []string{tempDir})
+	testConfig := NewAppConfig("json", "appconf", []string{etcDir})
 
 	// Save original appConfig and restore it after test
 	originalAppConfig := appConfig
