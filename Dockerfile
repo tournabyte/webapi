@@ -6,7 +6,12 @@ WORKDIR /usr/src/tournabyte/webapi
 COPY go.mod go.sum ./
 RUN go mod download
 
-COPY ./app/ ./internal ./
-RUN go build -v -o /usr/local/bin/app ./...
+COPY ./app/ ./app
+COPY ./internal/ ./internal/
+RUN go build -v -o /usr/local/bin/app ./app/start/
 
-CMD ["app"]
+# copy application configuration files
+WORKDIR /etc/tournabyte
+COPY ./appconf.json ./
+
+CMD ["app", "serve"]

@@ -65,6 +65,29 @@ services:
     environment:
       MINIO_ROOT_USER_FILE: /run/secrets/minio_root_user
       MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_root_pass
+  tbyte-apiserver:
+    depends_on:
+      - tbyte-devS3
+      - mongodb03
+      - mongodb02
+      - mongodb01
+    hostname: api.tournabyte.com
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      tags:
+        - dev
+        - preview
+    restart: no
+    ports:
+      - 8080:3000
+    secrets:
+      - token_signing_key
+      - mongo_password
+      - minio_access_id
+      - minio_access_key
+      - tls_certificate
+      - tls_keychain
 volumes:
   db_disk_03:
   db_disk_02:
@@ -89,3 +112,15 @@ secrets:
     file: ./.env/S3ROOT_USERNAME.txt
   minio_root_pass:
     file: ./.env/S3ROOT_PASSWORD.txt
+  token_signing_key:
+    file: ./.env/JWT_SECRET_KEY.txt
+  mongo_password:
+    file: ./.env/DBROOT01_PASSWORD.txt
+  minio_access_id:
+    file: ./.env/S3ROOT_USERNAME.txt
+  minio_access_key:
+    file: ./.env/S3ROOT_PASSWORD.txt
+  tls_keychain:
+    file: ./.env/TLS_KEYCHAIN.txt
+  tls_certificate:
+    file: ./.env/TLS_CERTIFICATE.txt

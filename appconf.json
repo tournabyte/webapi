@@ -1,10 +1,14 @@
 {
   "serve": {
     "port": "3000",
-    "useTLS": false,
+    "security": {
+      "useTLS": false,
+      "certificateFile": "/run/secrets/tls_certificate",
+      "keychainFile": "/run/secrets/tls_keychain"
+    },
     "sessions": {
       "signingAlgorithm": "HS256",
-      "signingKey": "c46c35c4a74485b9539e74a57182ac0aabaf909d5ae62dc0eb6f7d4f1f1d72cc",
+      "signingKeyFile": "/run/secrets/token_signing_key",
       "accessTokenTTL": "15m",
       "refreshTokenTTL": "72h",
       "tokenIssuer": "api.tournabyte.com",
@@ -18,12 +22,12 @@
       "mongodb03.tournabyte.com"
     ],
     "username": "mongoadmin",
-    "password": "v8Bscn-SUedmIQ1NDF9664uBNoMG30xstO25u43-PTiYHLBFkcIH_yATCHQBM-eLIYB47u3WbZOajWHiJshSZQ"
+    "password": "/run/secrets/mongo_password"
   },
   "minio": {
     "endpoint": "localhost:9000",
-    "accessKey": "minioadmin",
-    "secretKey": "xLXT3PTUKrRS_da8rO_8c3_Qi2NtHyK6EIblMeB7vgkCzEWyOhR6i1InDidPFRfIy2C2eAWxjPRZzQcCsPE0Sg"
+    "accessKey": "/run/secrets/minio_access_id",
+    "secretKey": "/run/secrets/minio_access_key"
   },
   "log": [
     {
@@ -37,7 +41,7 @@
     {
       "level": "info",
       "destination": [
-        "/tmp/log/tournabyte/webapi.log"
+        "/var/log/tournabyte/webapi.log"
       ],
       "source": true,
       "json": false
@@ -45,7 +49,7 @@
     {
       "level": "error",
       "destination": [
-        "/tmp/log/tournabyte/webapi.json"
+        "/var/log/tournabyte/webapi.json"
       ],
       "source": true,
       "json": true

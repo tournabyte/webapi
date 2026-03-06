@@ -17,6 +17,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -92,6 +93,9 @@ func resolve(val reflect.Value) error {
 			}
 
 			path := field.String()
+			if len(path) == 0 {
+				return fmt.Errorf("field `%+v` was tagged to be resolved from a file, but did not contain a path value", field)
+			}
 			if info, err := os.Stat(path); err != nil {
 				if os.IsNotExist(err) && !required {
 					return nil
@@ -303,6 +307,11 @@ func makeHandler(cfg loggingOptions) (slog.Handler, error) {
 		case "std.err":
 			outputs = append(outputs, os.Stderr)
 		default:
+			if filepath.IsAbs(dst) {
+				if err := os.MkdirAll(filepath.Dir(dst), 0666); err != nil {
+					return nil, err
+				}
+			}
 			if f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666); err != nil {
 				return nil, err
 			} else {
@@ -388,6 +397,7 @@ func (cfg *AppConfig) UnmarshalOptions() error {
 		slog.Error("Could not unmarshall configuration", slog.String("reason", err.Error()))
 		return err
 	}
+	slog.Info("Application configuration discovered", slog.Any("cfg", appOpts))
 	if err := resolveFiles(appOpts); err != nil {
 		slog.Error("Could not resolve configuration file paths with their contents", slog.String("reason", err.Error()))
 		return err
