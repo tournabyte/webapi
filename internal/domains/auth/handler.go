@@ -85,10 +85,13 @@ func CheckAuthorizationHeaderHandler(key string, issuer string, subject string, 
 //
 // Parameters:
 //   - db: the database driver to use to insert user records
+//   - signer: the JWT signing tool for signing access tokens
+//   - sessionIssuer: access token issuers to include in token claims
+//   - sessionSubject: access token subject to include in token claims
 //
 // Returns:
 //   - `gin.HandlerFunc`: a closure capable of handling HTTP request through the gin framework
-func UserRegistrationHandler(db *utils.DatabaseConnection, signer jose.Signer) gin.HandlerFunc {
+func UserRegistrationHandler(db *utils.DatabaseConnection, signer jose.Signer, sessionIssuer string, sessionSubject string) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		slog.InfoContext(ctx, "Invoked handler function for user registration")
 		var body NewUserRequest
@@ -104,7 +107,7 @@ func UserRegistrationHandler(db *utils.DatabaseConnection, signer jose.Signer) g
 		ops := []utils.MongoOperationFunc{
 			Register(ctx, &body),
 			FindLoginDetails(ctx, body.Email, &login, &response),
-			Authenticate(ctx, body.Password, signer, &login, &response),
+			Authenticate(ctx, body.Password, signer, sessionIssuer, sessionSubject, &login, &response),
 		}
 		if !db.SessionCompleted(ctx, ops...) {
 			slog.ErrorContext(ctx, "Failed to create user record")
@@ -121,10 +124,13 @@ func UserRegistrationHandler(db *utils.DatabaseConnection, signer jose.Signer) g
 //
 // Parameters:
 //   - db: the database driver used to find and verify login credentials
+//   - signer: the signing tool for creating JSON web tokens
+//   - sessionIssuer: the access token issuer to include in token claims
+//   - sessionSubject: the access token subject to include in token claims
 //
 // Returns:
 //   - `gin.HandlerFunc`: a closure capable of handling HTTP request through the gin framework
-func UserAuthenticationHandler(db *utils.DatabaseConnection, signer jose.Signer) gin.HandlerFunc {
+func UserAuthenticationHandler(db *utils.DatabaseConnection, signer jose.Signer, sessionIssuer string, sessionSubject string) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		slog.InfoContext(ctx, "Invoked handler function for user authentication")
 		var body LoginAttempt
@@ -139,7 +145,7 @@ func UserAuthenticationHandler(db *utils.DatabaseConnection, signer jose.Signer)
 
 		ops := []utils.MongoOperationFunc{
 			FindLoginDetails(ctx, body.AuthenticateAs, &login, &response),
-			Authenticate(ctx, body.Passphrase, signer, &login, &response),
+			Authenticate(ctx, body.Passphrase, signer, sessionIssuer, sessionSubject, &login, &response),
 		}
 		if !db.SessionCompleted(ctx, ops...) {
 			slog.ErrorContext(ctx, "Failed to create session")

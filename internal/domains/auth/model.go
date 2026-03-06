@@ -17,6 +17,7 @@ var (
 	ErrInvalidUserRegistration = errors.New("user cannot register due invalid input data")
 	ErrInvalidSession          = errors.New("session could not be created")
 	ErrWrongCredentials        = errors.New("provided credentials do not match any stored credentials")
+	ErrNilAuthorizationToken   = errors.New("cannot decode claims of a missing token")
 )
 
 // Constant `AuthorizationClaims` represents the context key to retrieve the owner ID of the access token included with a request

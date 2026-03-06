@@ -21,7 +21,7 @@
       "mongodb02.tournabyte.com",
       "mongodb03.tournabyte.com"
     ],
-    "username": "mongoadmin",
+    "username": "mongoadmin01",
     "password": "/run/secrets/mongo_password"
   },
   "minio": {

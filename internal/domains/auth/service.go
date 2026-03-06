@@ -73,16 +73,18 @@ func Register(ctx *gin.Context, src *NewUserRequest) utils.MongoOperationFunc {
 //   - ctx: the context managing the lifetime of the request
 //   - attempt: the client attempt to respond to the authentication challenge
 //   - signer: the signing tool for producing the JWT for later authorization
+//   - issuer: the access token issuer
+//   - subject: the access token subject
 //   - oracle: the correct login credentials to compare against the attempt
 //   - dst: the location to write the session token information for client response
 //
 // Returns:
 //   - `utils.MongoOperationFunc`: a closure capable of recording the necessary server-side session information in the database
-func Authenticate(ctx *gin.Context, attempt string, signer jose.Signer, oracle *user.LoginCredentials, dst *AuthenticatedUser) utils.MongoOperationFunc {
+func Authenticate(ctx *gin.Context, attempt string, signer jose.Signer, issuer string, subject string, oracle *user.LoginCredentials, dst *AuthenticatedUser) utils.MongoOperationFunc {
 	return func(timeout context.Context, conn *mongo.Client) error {
 
 		passwordMatches(ctx, attempt, oracle.PasswordHash)
-		access, refresh := makeSessionTokens(ctx, dst.ID, signer)
+		access, refresh := makeSessionTokens(ctx, dst.ID, issuer, subject, signer)
 		session := user.SecureSessionToken(ctx, refresh)
 
 		if truthy.ValueSlice(ctx.Errors) {
@@ -175,11 +177,11 @@ func FindLoginDetails(ctx *gin.Context, email string, creds *user.LoginCredentia
 // Returns:
 //   - `string`: the JWT token portion
 //   - `string`: the refresh token portion
-func makeSessionTokens(ctx *gin.Context, userid string, signer jose.Signer) (string, string) {
+func makeSessionTokens(ctx *gin.Context, userid string, tokenIssuer string, tokenSubject string, signer jose.Signer) (string, string) {
 	issueTime := time.Now().UTC()
 	public := jwt.Claims{
-		Issuer:    "api.tournabyte.com",
-		Subject:   "Tournabyte API authorization",
+		Issuer:    tokenIssuer,
+		Subject:   tokenSubject,
 		Expiry:    jwt.NewNumericDate(issueTime.Add(10 * time.Minute)),
 		IssuedAt:  jwt.NewNumericDate(issueTime),
 		NotBefore: jwt.NewNumericDate(issueTime.Add(15 * time.Second)),
@@ -223,14 +225,13 @@ func passwordMatches(ctx *gin.Context, provided string, stored string) {
 // Returns:
 //   - `bool`: value indicating whether the parsing process succeeded or not
 func parsedAuthorizationToken(ctx *gin.Context, raw string, dst *jwt.JSONWebToken, algorithms ...jose.SignatureAlgorithm) bool {
-	var parsingError error
-	dst, parsingError = jwt.ParseSigned(raw, algorithms)
-
-	if parsingError != nil {
-		ctx.Error(parsingError)
+	if parsed, err := jwt.ParseSigned(raw, algorithms); err != nil {
+		ctx.Error(err)
 		return false
+	} else {
+		*dst = *parsed
+		return true
 	}
-	return true
 }
 
 // Function `decodedTokenClaims` decodes the given JWT claims into the sequence of specified addresses
@@ -244,7 +245,11 @@ func parsedAuthorizationToken(ctx *gin.Context, raw string, dst *jwt.JSONWebToke
 // Returns:
 //   - `bool`: value indicating whether the claim decoding process succeeded or not
 func decodedTokenClaims(ctx *gin.Context, token *jwt.JSONWebToken, key []byte, addrs ...any) bool {
-	if err := token.Claims(key, addrs); err != nil {
+	if token == nil {
+		ctx.Error(ErrNilAuthorizationToken)
+		return false
+	}
+	if err := token.Claims(key, addrs...); err != nil {
 		ctx.Error(err)
 		return false
 	}

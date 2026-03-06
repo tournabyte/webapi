@@ -162,10 +162,10 @@ func (srv *TournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
 	authGroup := parentGroup.Group("auth")
 
 	// POST /auth/register
-	authGroup.POST("register", auth.UserRegistrationHandler(srv.db, srv.sess))
+	authGroup.POST("register", auth.UserRegistrationHandler(srv.db, srv.sess, srv.opts.Serve.Sessions.Issuer, srv.opts.Serve.Sessions.Subject))
 
 	// POST /auth/login
-	authGroup.POST("login", auth.UserAuthenticationHandler(srv.db, srv.sess))
+	authGroup.POST("login", auth.UserAuthenticationHandler(srv.db, srv.sess, srv.opts.Serve.Sessions.Issuer, srv.opts.Serve.Sessions.Subject))
 
 	// GET /auth/:userid
 	authGroup.GET(
