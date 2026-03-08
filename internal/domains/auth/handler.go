@@ -109,7 +109,7 @@ func UserRegistrationHandler(db *utils.DatabaseConnection, signer jose.Signer, s
 			FindLoginDetails(ctx, body.Email, &login, &response),
 			Authenticate(ctx, body.Password, signer, sessionIssuer, sessionSubject, &login, &response),
 		}
-		if !db.SessionCompleted(ctx, ops...) {
+		if !db.ExecutedInTransaction(ctx, ops...) {
 			slog.ErrorContext(ctx, "Failed to create user record")
 			utils.RespondWithError(ctx, utils.ErrUpstreamDataUnavailable)
 			return
@@ -147,7 +147,7 @@ func UserAuthenticationHandler(db *utils.DatabaseConnection, signer jose.Signer,
 			FindLoginDetails(ctx, body.AuthenticateAs, &login, &response),
 			Authenticate(ctx, body.Passphrase, signer, sessionIssuer, sessionSubject, &login, &response),
 		}
-		if !db.SessionCompleted(ctx, ops...) {
+		if !db.ExecutedInTransaction(ctx, ops...) {
 			slog.ErrorContext(ctx, "Failed to create session")
 			utils.RespondWithError(ctx, utils.ErrInvalidLoginAttempt)
 			return

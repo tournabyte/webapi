@@ -226,6 +226,7 @@ func (srv *TournabyteAPIService) Run() error {
 		slog.Info("Starting API server on", slog.Int("port", int(srv.opts.Serve.Port)))
 		slog.Debug("Security options ", slog.Bool("using TLS", srv.opts.Serve.Security.TLSEnabled))
 		var startupError error
+		defer srv.db.Disconnect(context.Background())
 
 		if srv.opts.Serve.Security.TLSEnabled {
 			startupError = server.ListenAndServeTLS(srv.opts.Serve.Security.Certificate, srv.opts.Serve.Security.Keychain)
