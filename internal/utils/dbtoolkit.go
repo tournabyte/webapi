@@ -697,6 +697,66 @@ func mergeToSeq(elements ...bson.E) bson.D {
 	return l
 }
 
+// Type `DocumentMetadata` represents common metatdata fields that can be attached to a document
+//
+// Fields:
+//   - Active: indicates the document should be accounted for the active counts
+//   - CreatedAt: the timestamp of document creation
+//   - UpdatedAt: the timestamp of document modification
+type DocumentMetadata struct {
+	Active    bool      `bson:"active"`
+	CreatedAt time.Time `bson:"created_at"`
+	UpdatedAt time.Time `bson:"updated_at"`
+}
+
+// Function `InitialMetadata` constructs a `DocumentMetadata` instance corresponding to a newly created active document
+//
+// Returns:
+//   - `DocumentMetadata`: the metadata corresponding to a newly created active document
+func InitialMetadata() DocumentMetadata {
+	now := time.Now().UTC()
+	return DocumentMetadata{
+		Active:    true,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+}
+
+// Function `(*DocumentMetadata).ToggleActive` updates the active field of the metadata to the opposite boolean value
+func (dm *DocumentMetadata) ToggleActive() {
+	dm.Active = !dm.Active
+}
+
+// Function `(*DocumentMetadata).MarkUpdated` updates the updated at field of the metadata to the current timestamp
+func (dm *DocumentMetadata) MarkUpdated() {
+	dm.UpdatedAt = time.Now().UTC()
+}
+
+// Type `QueryContext` represents a mongodb database/collection pair that can be used to specify a database or collection target
+//
+// Fields:
+//   - Database: the database name
+//   - Collection: the collection name (within the database)
+type QueryContext struct {
+	Database   string
+	Collection string
+}
+
+// Function `NewQueryContext` creates query context instances for reference when specifying database operations
+//
+// Parameters:
+//   - db: the name of the database to target
+//   - coll: the name of the collection (within the database) to target
+//
+// Returns:
+//   - `QueryContext`: the database/collection pair for easy reference
+func NewQueryContext(db string, coll string) QueryContext {
+	return QueryContext{
+		Database:   db,
+		Collection: coll,
+	}
+}
+
 // Function `defaultFactory` provides a data structure implementing the `DriverClient` interface
 // This default option simply wraps the `mongo.Connect` function and returns the corresponding result
 // Parameters:
