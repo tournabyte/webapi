@@ -23,7 +23,6 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/go-playground/validator/v10"
-	"github.com/tournabyte/webapi/internal/domains/user"
 	"github.com/tournabyte/webapi/internal/utils"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -37,9 +36,9 @@ import (
 //
 // Returns:
 //   - `utils.MongoOperationFunc`: a closure capable of performing the database insertion operation with the newly instantiated account data records
-func Register(ctx *gin.Context, src *NewUserRequest) utils.MongoOperationFunc {
-	account := user.NewAccountFromRequest(ctx, src.Email, src.DisplayName, src.Password)
-	slog.Debug("New account instance", slog.String("email", src.Email), slog.String("display name", src.DisplayName))
+func Register(ctx *gin.Context, src *AuthenticationRequest) utils.MongoOperationFunc {
+	account := newAccountFromRequest(ctx, src)
+	slog.Debug("New account instance", slog.String("email", src.Email))
 
 	return func(timeout context.Context, conn *mongo.Client) error {
 		if truthy.ValueSlice(ctx.Errors) {
@@ -54,8 +53,8 @@ func Register(ctx *gin.Context, src *NewUserRequest) utils.MongoOperationFunc {
 		}
 
 		_, opErr := conn.
-			Database(`tournabyte`).
-			Collection(`users`).
+			Database(UserAccountQueryContext.Database).
+			Collection(UserAccountQueryContext.Collection).
 			InsertOne(timeout, account, cfg)
 		if opErr != nil {
 			slog.ErrorContext(timeout, "abort mongo operation: error executing operation", slog.String("error", opErr.Error()))
@@ -72,44 +71,38 @@ func Register(ctx *gin.Context, src *NewUserRequest) utils.MongoOperationFunc {
 // Parameters:
 //   - ctx: the context managing the lifetime of the request
 //   - attempt: the client attempt to respond to the authentication challenge
-//   - signer: the signing tool for producing the JWT for later authorization
-//   - issuer: the access token issuer
-//   - subject: the access token subject
 //   - oracle: the correct login credentials to compare against the attempt
-//   - dst: the location to write the session token information for client response
+//   - dst: the location to write the session and token information for client response
+//   - sessLen: the duration the session should be valid for
+//   - opts: options for the access token generation
 //
 // Returns:
 //   - `utils.MongoOperationFunc`: a closure capable of recording the necessary server-side session information in the database
-func Authenticate(ctx *gin.Context, attempt string, signer jose.Signer, issuer string, subject string, oracle *user.LoginCredentials, dst *AuthenticatedUser) utils.MongoOperationFunc {
+func Authenticate(ctx *gin.Context, attempt *AuthenticationRequest, oracle *UserAccount, dst *AuthenticatedUser, tokenCfg *TokenOptions, sessCfg *SessionOptions) utils.MongoOperationFunc {
 	return func(timeout context.Context, conn *mongo.Client) error {
 
-		passwordMatches(ctx, attempt, oracle.PasswordHash)
-		access, refresh := makeSessionTokens(ctx, dst.ID, issuer, subject, signer)
-		session := user.SecureSessionToken(ctx, refresh)
+		passwordMatches(ctx, attempt, oracle)
+		access := makeAccessToken(ctx, oracle.ID, tokenCfg)
+		session, refresh := makeSession(ctx, oracle.ID, sessCfg.ExpiresIn)
 
 		if truthy.ValueSlice(ctx.Errors) {
 			return ErrInvalidSession
 		}
 
-		cfg, cfgErr := utils.UpdateOneOptsWith(utils.ValidateUpdatedDocument(true), utils.DoInsertOnNoMatchFound(false))
+		cfg, cfgErr := utils.InsertOneOptsWith(utils.ValidateInsertedDocument(true))
 		if cfgErr != nil {
 			return cfgErr
 		}
 
-		id, idErr := bson.ObjectIDFromHex(dst.ID)
-		if idErr != nil {
-			return idErr
-		}
-
 		_, opErr := conn.
-			Database(`tournabyte`).
-			Collection(`users`).
-			UpdateByID(
+			Database(UserSessionQueryContext.Database).
+			Collection(UserSessionQueryContext.Collection).
+			InsertOne(
 				timeout,
-				id,
-				bson.M{"$push": bson.M{"active_sessions": session}},
+				session,
 				cfg,
 			)
+
 		if opErr != nil {
 			return opErr
 		}
@@ -130,9 +123,7 @@ func Authenticate(ctx *gin.Context, attempt string, signer jose.Signer, issuer s
 //
 // Returns:
 //   - `utils.MongoOperationFunc`: a closure capable of performing the specified lookup and decoding the result
-func FindLoginDetails(ctx *gin.Context, email string, creds *user.LoginCredentials, dst *AuthenticatedUser) utils.MongoOperationFunc {
-	var account user.FullAccountDetails
-
+func FindLoginDetails(ctx *gin.Context, email string, creds *UserAccount, dst *AuthenticatedUser) utils.MongoOperationFunc {
 	return func(timeout context.Context, conn *mongo.Client) error {
 		if truthy.ValueSlice(ctx.Errors) {
 			return ErrInvalidSession
@@ -140,8 +131,9 @@ func FindLoginDetails(ctx *gin.Context, email string, creds *user.LoginCredentia
 
 		cfg, cfgErr := utils.FindOneOptsWith(
 			utils.FindOneProjectSpec(
-				bson.E{Key: "login_credentials", Value: true},
 				bson.E{Key: "_id", Value: true},
+				bson.E{Key: "login_email", Value: true},
+				bson.E{Key: "password_hash", Value: true},
 			),
 		)
 		if cfgErr != nil {
@@ -149,63 +141,111 @@ func FindLoginDetails(ctx *gin.Context, email string, creds *user.LoginCredentia
 		}
 
 		opErr := conn.
-			Database(`tournabyte`).
-			Collection(`users`).
+			Database(UserAccountQueryContext.Database).
+			Collection(UserAccountQueryContext.Collection).
 			FindOne(
 				timeout,
-				bson.D{bson.E{Key: "login_credentials.email", Value: email}},
+				bson.D{bson.E{Key: "login_email", Value: email}},
 				cfg,
-			).Decode(&account)
+			).Decode(creds)
 		if opErr != nil {
 			return opErr
 		}
 
-		creds.Email = account.Credentials.Email
-		creds.PasswordHash = account.Credentials.PasswordHash
-		dst.ID = account.ID.Hex()
+		dst.ID = creds.ID.Hex()
 		return nil
 	}
 }
 
-// Function `makeSessionTokens` creates the access and refresh tokens associated with a new session
+// Function `newAccountFromRequest` creates a `UserAccount` instance based on the given `NewUserRequest` and reports any errors that occur to the request context
 //
 // Parameters:
-//   - ctx: the context managing the lifetime of the request
-//   - userid: the ID of the user the new session is for
-//   - signer: the signing tool for signing the resulting token
+//   - ctx: the context managing the lifetime of this request
+//   - req: the user account details to initialize the instance with
 //
 // Returns:
-//   - `string`: the JWT token portion
-//   - `string`: the refresh token portion
-func makeSessionTokens(ctx *gin.Context, userid string, tokenIssuer string, tokenSubject string, signer jose.Signer) (string, string) {
+//   - `UserAccount`: the created instance based on the input details
+func newAccountFromRequest(ctx *gin.Context, req *AuthenticationRequest) UserAccount {
+	var account UserAccount
+
+	account.ID = bson.NewObjectID()
+	account.LoginEmail = req.Email
+	account.Metadata = utils.InitialMetadata()
+	if hash, err := argon2id.CreateHash(req.Password, argon2id.DefaultParams); err != nil {
+		ctx.Error(err)
+	} else {
+		account.PasswordHash = hash
+	}
+
+	return account
+}
+
+// Function `makeAccessToken` generates the JWT that can be used to access protected resources with an Authorization header
+//
+// Parameters:
+//   - ctx: the context managing the lifetime of this request
+//   - userid: the user this access token is for
+//   - opts: options to customize the token's claims
+//
+// Returns:
+//   - `string`: the generated access token
+func makeAccessToken(ctx *gin.Context, userid bson.ObjectID, opts *TokenOptions) string {
 	issueTime := time.Now().UTC()
 	public := jwt.Claims{
-		Issuer:    tokenIssuer,
-		Subject:   tokenSubject,
-		Expiry:    jwt.NewNumericDate(issueTime.Add(10 * time.Minute)),
+		Issuer:    opts.Issuer,
+		Subject:   opts.Subject,
+		Expiry:    jwt.NewNumericDate(issueTime.Add(opts.ExpiresIn)),
 		IssuedAt:  jwt.NewNumericDate(issueTime),
-		NotBefore: jwt.NewNumericDate(issueTime.Add(15 * time.Second)),
+		NotBefore: jwt.NewNumericDate(issueTime),
 	}
 
 	custom := AuthorizationTokenClaims{
-		Owner: userid,
+		Owner: userid.Hex(),
 	}
 
-	raw, err := jwt.Signed(signer).Claims(public).Claims(custom).Serialize()
+	raw, err := jwt.Signed(opts.Signer).Claims(public).Claims(custom).Serialize()
 	if err != nil {
 		ctx.Error(err)
 	}
-	return raw, rand.Text()
+	return raw
+}
+
+// Function `makeSession` creates a session instance for the given user ID that expires in the given duration
+//
+// Parameters:
+//   - ctx: the context managing the lifetime of this request
+//   - userid: the user id this session belongs to
+//   - expiresIn: the duration the session should remain valid
+//
+// Returns:
+//   - `UserSession`: the structured session infomration to be stored server-side
+func makeSession(ctx *gin.Context, userid bson.ObjectID, expiresIn time.Duration) (UserSession, string) {
+	var sess UserSession
+	raw := rand.Text()
+	now := time.Now().UTC()
+
+	hash, hashErr := argon2id.CreateHash(raw, argon2id.DefaultParams)
+	if hashErr != nil {
+		ctx.Error(hashErr)
+	}
+
+	sess.ID = hash
+	sess.Authorizes = userid
+	sess.NotValidBefore = now
+	sess.NotValidAfter = now.Add(expiresIn)
+	sess.Rotated = false
+
+	return sess, raw
 }
 
 // Function `passwordMatches` compares the provided raw string to the stored hash string
 //
 // Parameters:
 //   - ctx: the context managing the lifetime of the request
-//   - provided: the raw authentication attempt
+//   - provided: the authentication attempt
 //   - stored: the hashed oracle value
-func passwordMatches(ctx *gin.Context, provided string, stored string) {
-	match, err := argon2id.ComparePasswordAndHash(provided, stored)
+func passwordMatches(ctx *gin.Context, provided *AuthenticationRequest, stored *UserAccount) {
+	match, err := argon2id.ComparePasswordAndHash(provided.Password, stored.PasswordHash)
 	if err != nil {
 		ctx.Error(err)
 	}

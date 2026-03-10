@@ -19,7 +19,6 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/go-playground/validator/v10"
-	"github.com/tournabyte/webapi/internal/domains/user"
 	"github.com/tournabyte/webapi/internal/utils"
 )
 
@@ -85,17 +84,16 @@ func CheckAuthorizationHeaderHandler(key string, issuer string, subject string, 
 //
 // Parameters:
 //   - db: the database driver to use to insert user records
-//   - signer: the JWT signing tool for signing access tokens
-//   - sessionIssuer: access token issuers to include in token claims
-//   - sessionSubject: access token subject to include in token claims
+//   - tokenOpts: the options for the token making logic
+//   - sessionOpts: the options for the session making logic
 //
 // Returns:
 //   - `gin.HandlerFunc`: a closure capable of handling HTTP request through the gin framework
-func UserRegistrationHandler(db *utils.DatabaseConnection, signer jose.Signer, sessionIssuer string, sessionSubject string) gin.HandlerFunc {
+func UserRegistrationHandler(db *utils.DatabaseConnection, tokenOpts *TokenOptions, sessionOpts *SessionOptions) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		slog.InfoContext(ctx, "Invoked handler function for user registration")
-		var body NewUserRequest
-		var login user.LoginCredentials
+		var body AuthenticationRequest
+		var account UserAccount
 		var response AuthenticatedUser
 
 		if !utils.DidBindBody(ctx, &body) {
@@ -106,8 +104,8 @@ func UserRegistrationHandler(db *utils.DatabaseConnection, signer jose.Signer, s
 
 		ops := []utils.MongoOperationFunc{
 			Register(ctx, &body),
-			FindLoginDetails(ctx, body.Email, &login, &response),
-			Authenticate(ctx, body.Password, signer, sessionIssuer, sessionSubject, &login, &response),
+			FindLoginDetails(ctx, body.Email, &account, &response),
+			Authenticate(ctx, &body, &account, &response, tokenOpts, sessionOpts),
 		}
 		if !db.ExecutedInTransaction(ctx, ops...) {
 			slog.ErrorContext(ctx, "Failed to create user record")
@@ -124,17 +122,16 @@ func UserRegistrationHandler(db *utils.DatabaseConnection, signer jose.Signer, s
 //
 // Parameters:
 //   - db: the database driver used to find and verify login credentials
-//   - signer: the signing tool for creating JSON web tokens
-//   - sessionIssuer: the access token issuer to include in token claims
-//   - sessionSubject: the access token subject to include in token claims
+//   - tokenOpts: the access token configuration to include in token claims
+//   - sessionOpts: the refresh token configuration to use during generation
 //
 // Returns:
 //   - `gin.HandlerFunc`: a closure capable of handling HTTP request through the gin framework
-func UserAuthenticationHandler(db *utils.DatabaseConnection, signer jose.Signer, sessionIssuer string, sessionSubject string) gin.HandlerFunc {
+func UserAuthenticationHandler(db *utils.DatabaseConnection, tokenOpts *TokenOptions, sessionOpts *SessionOptions) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		slog.InfoContext(ctx, "Invoked handler function for user authentication")
-		var body LoginAttempt
-		var login user.LoginCredentials
+		var body AuthenticationRequest
+		var account UserAccount
 		var response AuthenticatedUser
 
 		if !utils.DidBindBody(ctx, &body) {
@@ -144,8 +141,8 @@ func UserAuthenticationHandler(db *utils.DatabaseConnection, signer jose.Signer,
 		}
 
 		ops := []utils.MongoOperationFunc{
-			FindLoginDetails(ctx, body.AuthenticateAs, &login, &response),
-			Authenticate(ctx, body.Passphrase, signer, sessionIssuer, sessionSubject, &login, &response),
+			FindLoginDetails(ctx, body.Email, &account, &response),
+			Authenticate(ctx, &body, &account, &response, tokenOpts, sessionOpts),
 		}
 		if !db.ExecutedInTransaction(ctx, ops...) {
 			slog.ErrorContext(ctx, "Failed to create session")
@@ -157,3 +154,7 @@ func UserAuthenticationHandler(db *utils.DatabaseConnection, signer jose.Signer,
 		utils.RespondWithRequestedData(ctx, &response, http.StatusOK)
 	}
 }
+
+// func SessionRefreshHandler()
+// func AuthenticationUpdateHandler()
+// func SessionRevocationHandler()
