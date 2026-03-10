@@ -160,12 +160,19 @@ func (srv *TournabyteAPIService) addGlobalMiddleware() {
 //   - parentGroup: the router group to attach to
 func (srv *TournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
 	authGroup := parentGroup.Group("auth")
+	sessionCfg := auth.SessionOptions{ExpiresIn: srv.opts.Serve.Sessions.RefreshTokenTTL}
+	tokenCfg := auth.TokenOptions{
+		Signer:    srv.sess,
+		Subject:   srv.opts.Serve.Sessions.Subject,
+		Issuer:    srv.opts.Serve.Sessions.Issuer,
+		ExpiresIn: srv.opts.Serve.Sessions.AccessTokenTTL,
+	}
 
 	// POST /auth/register
-	authGroup.POST("register", auth.UserRegistrationHandler(srv.db, srv.sess, srv.opts.Serve.Sessions.Issuer, srv.opts.Serve.Sessions.Subject))
+	authGroup.POST("register", auth.UserRegistrationHandler(srv.db, &tokenCfg, &sessionCfg))
 
 	// POST /auth/login
-	authGroup.POST("login", auth.UserAuthenticationHandler(srv.db, srv.sess, srv.opts.Serve.Sessions.Issuer, srv.opts.Serve.Sessions.Subject))
+	authGroup.POST("login", auth.UserAuthenticationHandler(srv.db, &tokenCfg, &sessionCfg))
 
 	// GET /auth/:userid
 	authGroup.GET(
