@@ -16,7 +16,6 @@ import (
 	"crypto/tls"
 	"time"
 
-	"github.com/carlmjohnson/truthy"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -834,107 +833,36 @@ func (db *DatabaseConnection) Disconnect(ctx context.Context) error {
 	return db.client.Disconnect(ctx)
 }
 
-// Function `DatabaseConnection.Client` retrieves a reference to the underlying mongo-driver client instance
-// Returns:
-//   - `mongo.Client`: the underlying mongo-driver client instance
-func (db *DatabaseConnection) Client() *mongo.Client {
-	return db.client
-}
-
-func (db *DatabaseConnection) Executed(ctx *gin.Context, op MongoOperationFunc) bool {
-	deadline, stop := db.getTimeout(ctx)
-	defer stop()
-
-	return db.noError(ctx, op(deadline, db.client))
-}
-
-// Function `DatabaseConnection.ExecutedInSession` initiates a client session and executes the sequence of operation functions within the created session
+// Function `DatabaseConnection.WithSession` produces a handler function closure that sets up a mongo session within the request context
 // Parameters:
-//   - ctx: the context managing the lifetime of the session
-//   - ...ops: sequence of `MongoOperationFunc`s to execute within the session
+//   - txn: is this session also a transaction?
 //
 // Returns:
-//   - `bool`: true indicates the session completed without issue, false indicates an issue occurred
-//
-// Note:
-//   - Use this when working with an operation sequence that will at most have one write operation, even if multiple collections are accessed
-func (db *DatabaseConnection) ExecutedInSession(ctx *gin.Context, ops ...MongoOperationFunc) bool {
-	deadline, stop := db.getTimeout(ctx)
-	defer stop()
+//   - `gin.HandlerFunc`: a closure capable of taking part of a handlers chain
+func (db *DatabaseConnection) WithSession(txn bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		sess, err := db.client.StartSession()
+		if err != nil {
+			RespondWithError(c, ErrUpstreamDataUnavailable)
+			return
+		}
 
-	if sess, err := db.client.StartSession(); err != nil {
-		return db.noError(ctx, err)
-	} else {
-		defer sess.EndSession(deadline)
-		for _, op := range ops {
-			if err := op(deadline, sess.Client()); err != nil {
-				return db.noError(ctx, err)
+		sessCtx := mongo.NewSessionContext(c.Request.Context(), sess)
+		c.Request = c.Request.WithContext(sessCtx)
+		defer sess.EndSession(sessCtx)
+		if txn && sess.StartTransaction() != nil {
+			RespondWithError(c, ErrUpstreamDataUnavailable)
+			return
+		}
+
+		c.Next()
+
+		if txn {
+			if txnErr := sessCtx.Err(); txnErr != nil {
+				sess.AbortTransaction(context.Background())
+			} else {
+				sess.CommitTransaction(context.Background())
 			}
 		}
-		return db.noError(ctx, nil)
 	}
-}
-
-// Function `DatabaseConnection.ExecutedInTransaction` initiates a client session and executes the sequence of operation functions within a transaction
-// Parameters:
-//   - ctx: the context managing the lifetime of the session
-//   - ...ops: sequence of `MongoOperationFunc`s to execute within the session
-//
-// Returns:
-//   - `bool`: true indicates the session completed without issue, false indicates an issue occurred
-//
-// Note:
-//   - Use this when ops will work with multiple collections, particularly if more than one write operation will occur
-func (db *DatabaseConnection) ExecutedInTransaction(ctx *gin.Context, ops ...MongoOperationFunc) bool {
-	deadline, stop := db.getTimeout(ctx)
-	defer stop()
-
-	if sess, err := db.client.StartSession(); err != nil {
-		return db.noError(ctx, err)
-	} else {
-		defer sess.EndSession(deadline)
-		_, err := sess.WithTransaction(
-			mongo.NewSessionContext(deadline, sess),
-			func(ctx context.Context) (any, error) {
-				for _, op := range ops {
-					if err := op(deadline, sess.Client()); err != nil {
-						return false, err
-					}
-				}
-				return true, nil
-			},
-		)
-		return db.noError(ctx, err)
-	}
-}
-
-// Function `(*DatabaseConnection).getTimeout` creates the timeout context from the given request context
-//
-// Parameters:
-//   - ctx: the context managing the lifetime of this request
-//
-// Returns:
-//   - `context.Context`: the context with timeout variant for managing database operation lifetime
-//   - `context.CancelFunc`: the cancellation function used signaling work should stop
-func (db *DatabaseConnection) getTimeout(ctx *gin.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(
-		ctx.Request.Context(),
-		truthy.Coalesce(db.options.Timeout, time.Minute),
-	)
-}
-
-// Function `(*DatabaseConnection).noError` reports the non-nil error to the request context's error chain
-//
-// Parameters:
-//   - ctx: the context managing the lifetime of this request
-//   - e: the error value
-//
-// Returns:
-//   - `bool`: false is `e` is non-nil and true if `e` is nil
-func (db *DatabaseConnection) noError(ctx *gin.Context, e error) bool {
-	if e != nil {
-		ctx.Error(e)
-		return false
-	}
-	return true
 }
