@@ -11,7 +11,14 @@ package auth
  *
  */
 
-import "errors"
+import (
+	"errors"
+	"time"
+
+	"github.com/go-jose/go-jose/v4"
+	"github.com/tournabyte/webapi/internal/utils"
+	"go.mongodb.org/mongo-driver/v2/bson"
+)
 
 var (
 	ErrInvalidUserRegistration = errors.New("user cannot register due invalid input data")
@@ -20,8 +27,14 @@ var (
 	ErrNilAuthorizationToken   = errors.New("cannot decode claims of a missing token")
 )
 
-// Constant `AuthorizationClaims` represents the context key to retrieve the owner ID of the access token included with a request
-const AuthorizationClaims = "AuthorizedID"
+const (
+	AuthorizationClaims = "AuthorizedID"
+)
+
+var (
+	UserAccountQueryContext = utils.NewQueryContext(`tournabyte`, `users`)
+	UserSessionQueryContext = utils.NewQueryContext(`tournabyte`, `sessions`)
+)
 
 // Type `AuthorizationTokenClaims` represents the custom claims present in a JWT produced by the Tournabyte API
 //
@@ -31,44 +44,54 @@ type AuthorizationTokenClaims struct {
 	Owner string `json:"owner" validate:"required,mongodb"`
 }
 
-// Type `AuthorizationHeaderContent` represents a key:value pair specifically for the HTTP Authorization header
+// Type `UserAccount` represesnts a user within the Tournabyte platform (this is not the same as a player or team)
 //
 // Fields:
-//   - Token: JWT value given as part of the HTTP authorization header
-type AuthorizationHeaderContent struct {
-	Token string `header:"Authorization" binding:"required"`
+//   - ID: the user account id
+//   - LoginEmail: the email associated with this user's login details
+//   - PasswordHash: the hashed password associated with this user's login details
+//   - Metadata: account document metadata
+type UserAccount struct {
+	ID           bson.ObjectID          `bson:"_id"`
+	LoginEmail   string                 `bson:"login_email"`
+	PasswordHash string                 `bson:"password_hash"`
+	Metadata     utils.DocumentMetadata `bson:"metadata"`
 }
 
-// Type `NewUserRequest` represents the minimum details required to create a user account
+// Type `UserSession` represents the server-side session details needed to validate refresh tokens and reissue access tokens
 //
 // Fields:
-//   - Email: the email of the new user
-//   - Password: the password of the new user (to be cryptographically secured before storing)
-//   - DisplayName: the public display name of the new user
-type NewUserRequest struct {
-	Email       string `json:"email" binding:"required,email"`
-	Password    string `json:"password" binding:"required,min=8"`
-	DisplayName string `json:"displayName" binding:"required,alphanum,min=4"`
+//   - ID: the session ID
+//   - NotValidBefore: the timestamp when the session refresh can be used
+//   - NotValidAfter: the timestamp stopping when the session refresh can be used
+//   - Authorizes: the user ID this session authorizes
+//   - Rotated: indicates whether this session has already been used to rotate access tokens
+type UserSession struct {
+	ID             string        `bson:"_id"`
+	NotValidBefore time.Time     `bson:"not_valid_before"`
+	NotValidAfter  time.Time     `bson:"not_valid_after"`
+	Authorizes     bson.ObjectID `bson:"authorizes"`
+	Rotated        bool          `bson:"rotated"`
 }
 
-// Type `LoginAttempt` represents the details needed to complete an authentication challenge
+// Type `TokenOptions` groups the information needed to create and verify access tokens
 //
 // Fields:
-//   - AuthenticateAs: the email identifier to initiate the authentication challenge as
-//   - Passphrase: the reponse to the authentication challenge
-type LoginAttempt struct {
-	AuthenticateAs string `json:"authenticateAs" binding:"required"`
-	Passphrase     string `json:"passphrase" binding:"required"`
+//   - Issuer: the named token issuer
+//   - Subject: the subject of the access token
+//   - ExpiresIn: duration created access token should remain valid
+//   - Signer: token signing tool
+type TokenOptions struct {
+	Issuer    string
+	Subject   string
+	ExpiresIn time.Duration
+	Signer    jose.Signer
 }
 
-// Type `AuthenticatedUser` represents the response structure for successfully authenticating as a user
+// Type `SessionOptions` groups the information needed to create and verify refresh tokens
 //
 // Fields:
-//   - ID: the new user ID
-//   - AccessToken: the JSON web token used for authorization to access protected resources
-//   - RefreshToken: the token used for obtaining another access token once the current one has expired
-type AuthenticatedUser struct {
-	ID           string `json:"id"`
-	AccessToken  string `json:"accessToken"`
-	RefreshToken string `json:"refreshToken"`
+//   - ExpiresIn: duration created refresh token should remain valid
+type SessionOptions struct {
+	ExpiresIn time.Duration
 }

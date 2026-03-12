@@ -160,41 +160,20 @@ func (srv *TournabyteAPIService) addGlobalMiddleware() {
 //   - parentGroup: the router group to attach to
 func (srv *TournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
 	authGroup := parentGroup.Group("auth")
+	sessionCfg := auth.SessionOptions{ExpiresIn: srv.opts.Serve.Sessions.RefreshTokenTTL}
+	tokenCfg := auth.TokenOptions{
+		Signer:    srv.sess,
+		Subject:   srv.opts.Serve.Sessions.Subject,
+		Issuer:    srv.opts.Serve.Sessions.Issuer,
+		ExpiresIn: srv.opts.Serve.Sessions.AccessTokenTTL,
+	}
 
 	// POST /auth/register
-	authGroup.POST("register", auth.UserRegistrationHandler(srv.db, srv.sess, srv.opts.Serve.Sessions.Issuer, srv.opts.Serve.Sessions.Subject))
+	authGroup.POST("register", srv.db.WithSession(true), auth.UserRegistrationHandler(&tokenCfg, &sessionCfg))
 
 	// POST /auth/login
-	authGroup.POST("login", auth.UserAuthenticationHandler(srv.db, srv.sess, srv.opts.Serve.Sessions.Issuer, srv.opts.Serve.Sessions.Subject))
+	// authGroup.POST("login", auth.UserAuthenticationHandler(srv.db, &tokenCfg, &sessionCfg))
 
-	// GET /auth/:userid
-	authGroup.GET(
-		"/:userid",
-		auth.CheckAuthorizationHeaderHandler(
-			srv.opts.Serve.Sessions.SigningKey,
-			srv.opts.Serve.Sessions.Issuer,
-			srv.opts.Serve.Sessions.Subject,
-			srv.validationFunc,
-			jose.SignatureAlgorithm(srv.opts.Serve.Sessions.Algorithm),
-		),
-		func(ctx *gin.Context) {
-			type R struct {
-				ID string `uri:"userid" binding:"required,mongodb"`
-			}
-			var r R
-			if err := ctx.ShouldBindUri(&r); err != nil {
-				slog.Error("Could not bind URI parameter(s)")
-				ctx.AbortWithStatusJSON(400, gin.H{"msg": err.Error()})
-				return
-			}
-			if r.ID != ctx.GetString(auth.AuthorizationClaims) {
-				slog.ErrorContext(ctx, "Could not validate authorization claims", auth.AuthorizationClaims, ctx.GetString(auth.AuthorizationClaims))
-				ctx.AbortWithStatusJSON(401, gin.H{"msg": "Unauthorized"})
-				return
-			}
-			ctx.JSON(200, gin.H{"user": r.ID, "msg": "successfully accessed protected resource"})
-		},
-	)
 }
 
 // Function `(*TournabyteAPIService).RegisterRoutes` initializes the underlying engine with the appropriate routes for service
@@ -226,6 +205,7 @@ func (srv *TournabyteAPIService) Run() error {
 		slog.Info("Starting API server on", slog.Int("port", int(srv.opts.Serve.Port)))
 		slog.Debug("Security options ", slog.Bool("using TLS", srv.opts.Serve.Security.TLSEnabled))
 		var startupError error
+		defer srv.db.Disconnect(context.Background())
 
 		if srv.opts.Serve.Security.TLSEnabled {
 			startupError = server.ListenAndServeTLS(srv.opts.Serve.Security.Certificate, srv.opts.Serve.Security.Keychain)
