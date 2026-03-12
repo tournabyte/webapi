@@ -44,24 +44,6 @@ type AuthorizationTokenClaims struct {
 	Owner string `json:"owner" validate:"required,mongodb"`
 }
 
-// Type `AuthorizationHeaderContent` represents a key:value pair specifically for the HTTP Authorization header
-//
-// Fields:
-//   - Token: JWT value given as part of the HTTP authorization header
-type AuthorizationHeaderContent struct {
-	Token string `header:"Authorization" binding:"required"`
-}
-
-// Type `NewUserRequest` represents the minimum details required to create a user account
-//
-// Fields:
-//   - Email: the email of the new user
-//   - Password: the password of the new user (to be cryptographically secured before storing)
-type AuthenticationRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=8"`
-}
-
 // Type `UserAccount` represesnts a user within the Tournabyte platform (this is not the same as a player or team)
 //
 // Fields:
@@ -92,6 +74,13 @@ type UserSession struct {
 	Rotated        bool          `bson:"rotated"`
 }
 
+// Type `TokenOptions` groups the information needed to create and verify access tokens
+//
+// Fields:
+//   - Issuer: the named token issuer
+//   - Subject: the subject of the access token
+//   - ExpiresIn: duration created access token should remain valid
+//   - Signer: token signing tool
 type TokenOptions struct {
 	Issuer    string
 	Subject   string
@@ -99,18 +88,10 @@ type TokenOptions struct {
 	Signer    jose.Signer
 }
 
-type SessionOptions struct {
-	ExpiresIn time.Duration
-}
-
-// Type `AuthenticatedUser` represents the response structure for successfully authenticating as a user
+// Type `SessionOptions` groups the information needed to create and verify refresh tokens
 //
 // Fields:
-//   - ID: the new user ID
-//   - AccessToken: the JSON web token used for authorization to access protected resources
-//   - RefreshToken: the token used for obtaining another access token once the current one has expired
-type AuthenticatedUser struct {
-	ID           string `json:"id"`
-	AccessToken  string `json:"accessToken"`
-	RefreshToken string `json:"refreshToken"`
+//   - ExpiresIn: duration created refresh token should remain valid
+type SessionOptions struct {
+	ExpiresIn time.Duration
 }

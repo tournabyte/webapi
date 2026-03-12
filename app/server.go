@@ -169,39 +169,11 @@ func (srv *TournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
 	}
 
 	// POST /auth/register
-	authGroup.POST("register", auth.UserRegistrationHandler(srv.db, &tokenCfg, &sessionCfg))
+	authGroup.POST("register", srv.db.WithSession(true), auth.UserRegistrationHandler(&tokenCfg, &sessionCfg))
 
 	// POST /auth/login
-	authGroup.POST("login", auth.UserAuthenticationHandler(srv.db, &tokenCfg, &sessionCfg))
+	// authGroup.POST("login", auth.UserAuthenticationHandler(srv.db, &tokenCfg, &sessionCfg))
 
-	// GET /auth/:userid
-	authGroup.GET(
-		"/:userid",
-		auth.CheckAuthorizationHeaderHandler(
-			srv.opts.Serve.Sessions.SigningKey,
-			srv.opts.Serve.Sessions.Issuer,
-			srv.opts.Serve.Sessions.Subject,
-			srv.validationFunc,
-			jose.SignatureAlgorithm(srv.opts.Serve.Sessions.Algorithm),
-		),
-		func(ctx *gin.Context) {
-			type R struct {
-				ID string `uri:"userid" binding:"required,mongodb"`
-			}
-			var r R
-			if err := ctx.ShouldBindUri(&r); err != nil {
-				slog.Error("Could not bind URI parameter(s)")
-				ctx.AbortWithStatusJSON(400, gin.H{"msg": err.Error()})
-				return
-			}
-			if r.ID != ctx.GetString(auth.AuthorizationClaims) {
-				slog.ErrorContext(ctx, "Could not validate authorization claims", auth.AuthorizationClaims, ctx.GetString(auth.AuthorizationClaims))
-				ctx.AbortWithStatusJSON(401, gin.H{"msg": "Unauthorized"})
-				return
-			}
-			ctx.JSON(200, gin.H{"user": r.ID, "msg": "successfully accessed protected resource"})
-		},
-	)
 }
 
 // Function `(*TournabyteAPIService).RegisterRoutes` initializes the underlying engine with the appropriate routes for service

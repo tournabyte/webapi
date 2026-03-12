@@ -16,6 +16,7 @@ import (
 	"crypto/tls"
 	"time"
 
+	"github.com/carlmjohnson/truthy"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -858,10 +859,10 @@ func (db *DatabaseConnection) WithSession(txn bool) gin.HandlerFunc {
 		c.Next()
 
 		if txn {
-			if txnErr := sessCtx.Err(); txnErr != nil {
-				sess.AbortTransaction(context.Background())
+			if truthy.ValueSlice(c.Errors) {
+				sess.AbortTransaction(sessCtx)
 			} else {
-				sess.CommitTransaction(context.Background())
+				sess.CommitTransaction(sessCtx)
 			}
 		}
 	}

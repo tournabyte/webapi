@@ -13,7 +13,6 @@ package utils
 
 import (
 	"context"
-	"errors"
 )
 
 // Type `StepFn` represents a processing step within a pipeline. It is connectable by an incoming step whose output is type `I` and an outgoing step whose input is type `O`
@@ -56,7 +55,7 @@ func Stage[I any, O any](ctx context.Context, cancelFunc context.CancelCauseFunc
 				return
 			case item, ok := <-in:
 				if !ok {
-					cancelFunc(errors.New("broken pipe"))
+					// cancelFunc(errors.New("broken pipe"))
 					return
 				}
 				if next, err := f(item); err != nil {
