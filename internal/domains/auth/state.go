@@ -27,6 +27,9 @@ type AuthenticationHandlerState struct {
 	bindings  utils.Bindings
 	request   AuthenticationRequest
 	response  AuthenticatedUser
-	record    UserAccount
+	account   UserAccount
+	session   UserSession
 	mongosess *mongo.Session
+	access    *TokenOptions
+	refresh   *SessionOptions
 }

@@ -30,6 +30,8 @@ func UserRegistrationHandler(tokenOpts *TokenOptions, sessionOpts *SessionOption
 		state := AuthenticationHandlerState{
 			bindings:  utils.BindingsFromRequestContext(c, utils.ShouldHaveJSONBody),
 			mongosess: mongo.SessionFromContext(ctx),
+			access:    tokenOpts,
+			refresh:   sessionOpts,
 		}
 		slog.Debug("Initialized handler state and context variables")
 
@@ -37,6 +39,11 @@ func UserRegistrationHandler(tokenOpts *TokenOptions, sessionOpts *SessionOption
 		out1 := utils.Stage(ctx, cancelf, bindAuthenticationRequest, utils.Feed(ctx, state))
 		out2 := utils.Stage(ctx, cancelf, deriveAccountRecordFromRequest, out1)
 		out3 := utils.Stage(ctx, cancelf, saveAccountRecord, out2)
+		out4 := utils.Stage(ctx, cancelf, validateCredentials, out3)
+		out5 := utils.Stage(ctx, cancelf, createAccessToken, out4)
+		out6 := utils.Stage(ctx, cancelf, createRefreshToken, out5)
+		out7 := utils.Stage(ctx, cancelf, createSessionRecord, out6)
+		out8 := utils.Stage(ctx, cancelf, saveSessionRecord, out7)
 
 		slog.Debug("Awaiting context cancellation or pipeline conclusion")
 		select {
@@ -47,7 +54,7 @@ func UserRegistrationHandler(tokenOpts *TokenOptions, sessionOpts *SessionOption
 				c.Error(err)
 				utils.RespondWithError(c, err)
 			}
-		case res, ok := <-out3:
+		case res, ok := <-out8:
 			if !ok {
 				slog.Error("Handler state could not be read")
 				c.Error(utils.ErrUndisclosedHandlerFailure)

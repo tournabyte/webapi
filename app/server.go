@@ -23,6 +23,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	"github.com/tournabyte/webapi/internal/domains/auth"
 	"github.com/tournabyte/webapi/internal/utils"
 )
@@ -152,6 +153,18 @@ func (srv *TournabyteAPIService) addGlobalMiddleware() {
 			}
 		},
 	))
+	srv.router.Use(func(ctx *gin.Context) {
+		requestID := uuid.New().String()
+		ctx.Set("RequestID", requestID)
+		ctx.Writer.Header().Set("X-Request-ID", requestID)
+		ctx.Next()
+	})
+	srv.router.Use(func(ctx *gin.Context) {
+		startTime := time.Now().UTC()
+		ctx.Next()
+		took := time.Since(startTime)
+		ctx.Writer.Header().Set("X-Request-Duration", took.String())
+	})
 }
 
 // Function `(*TournabyteAPIService).addAuthGroup` setups the handler chains to respond to requests on the `/auth/` endpoint group
