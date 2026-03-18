@@ -697,6 +697,66 @@ func mergeToSeq(elements ...bson.E) bson.D {
 	return l
 }
 
+// Type `DocumentMetadata` represents common metatdata fields that can be attached to a document
+//
+// Fields:
+//   - Active: indicates the document should be accounted for the active counts
+//   - CreatedAt: the timestamp of document creation
+//   - UpdatedAt: the timestamp of document modification
+type DocumentMetadata struct {
+	Active    bool      `bson:"active"`
+	CreatedAt time.Time `bson:"created_at"`
+	UpdatedAt time.Time `bson:"updated_at"`
+}
+
+// Function `InitialMetadata` constructs a `DocumentMetadata` instance corresponding to a newly created active document
+//
+// Returns:
+//   - `DocumentMetadata`: the metadata corresponding to a newly created active document
+func InitialMetadata() DocumentMetadata {
+	now := time.Now().UTC()
+	return DocumentMetadata{
+		Active:    true,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+}
+
+// Function `(*DocumentMetadata).ToggleActive` updates the active field of the metadata to the opposite boolean value
+func (dm *DocumentMetadata) ToggleActive() {
+	dm.Active = !dm.Active
+}
+
+// Function `(*DocumentMetadata).MarkUpdated` updates the updated at field of the metadata to the current timestamp
+func (dm *DocumentMetadata) MarkUpdated() {
+	dm.UpdatedAt = time.Now().UTC()
+}
+
+// Type `QueryContext` represents a mongodb database/collection pair that can be used to specify a database or collection target
+//
+// Fields:
+//   - Database: the database name
+//   - Collection: the collection name (within the database)
+type QueryContext struct {
+	Database   string
+	Collection string
+}
+
+// Function `NewQueryContext` creates query context instances for reference when specifying database operations
+//
+// Parameters:
+//   - db: the name of the database to target
+//   - coll: the name of the collection (within the database) to target
+//
+// Returns:
+//   - `QueryContext`: the database/collection pair for easy reference
+func NewQueryContext(db string, coll string) QueryContext {
+	return QueryContext{
+		Database:   db,
+		Collection: coll,
+	}
+}
+
 // Function `defaultFactory` provides a data structure implementing the `DriverClient` interface
 // This default option simply wraps the `mongo.Connect` function and returns the corresponding result
 // Parameters:
@@ -774,37 +834,36 @@ func (db *DatabaseConnection) Disconnect(ctx context.Context) error {
 	return db.client.Disconnect(ctx)
 }
 
-// Function `DatabaseConnection.Client` retrieves a reference to the underlying mongo-driver client instance
-// Returns:
-//   - `mongo.Client`: the underlying mongo-driver client instance
-func (db *DatabaseConnection) Client() *mongo.Client {
-	return db.client
-}
-
-// Function `DatabaseConnection.SessionCompleted` initiates a client session and executes the sequence of operation functions within the created session
+// Function `DatabaseConnection.WithSession` produces a handler function closure that sets up a mongo session within the request context
 // Parameters:
-//   - ctx: the context managing the lifetime of the session
-//   - ...ops: sequence of `MongoOperationFunc`s to execute within the session
+//   - txn: is this session also a transaction?
 //
 // Returns:
-//   - `bool`: true indicates the session completed without issue, false indicates an issue occurred
-func (db *DatabaseConnection) SessionCompleted(ctx *gin.Context, ops ...MongoOperationFunc) bool {
-	if sess, err := db.Client().StartSession(); err != nil {
-		ctx.Error(err)
-		return false
-	} else {
-		timeout, cancel := context.WithTimeout(
-			ctx.Request.Context(),
-			truthy.Coalesce(db.options.Timeout, time.Minute),
-		)
-		defer cancel()
-		defer sess.EndSession(timeout)
-		for _, op := range ops {
-			if err := op(timeout, sess.Client()); err != nil {
-				ctx.Error(err)
-				return false
+//   - `gin.HandlerFunc`: a closure capable of taking part of a handlers chain
+func (db *DatabaseConnection) WithSession(txn bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		sess, err := db.client.StartSession()
+		if err != nil {
+			RespondWithError(c, ErrUpstreamDataUnavailable)
+			return
+		}
+
+		sessCtx := mongo.NewSessionContext(c.Request.Context(), sess)
+		c.Request = c.Request.WithContext(sessCtx)
+		defer sess.EndSession(sessCtx)
+		if txn && sess.StartTransaction() != nil {
+			RespondWithError(c, ErrUpstreamDataUnavailable)
+			return
+		}
+
+		c.Next()
+
+		if txn {
+			if truthy.ValueSlice(c.Errors) {
+				sess.AbortTransaction(sessCtx)
+			} else {
+				sess.CommitTransaction(sessCtx)
 			}
 		}
-		return true
 	}
 }
