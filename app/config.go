@@ -12,6 +12,7 @@ package app
  */
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -112,7 +113,9 @@ func resolve(val reflect.Value) error {
 			if data, err := os.ReadFile(path); err != nil {
 				return err
 			} else {
-				field.SetString(string(data))
+				buf := bytes.NewBuffer(data)
+				fmt.Printf("Read `%+v` from %s\n", buf.Bytes(), path)
+				field.SetString(strings.TrimSpace(buf.String()))
 				continue
 			}
 		}
