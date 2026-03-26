@@ -114,7 +114,6 @@ func resolve(val reflect.Value) error {
 				return err
 			} else {
 				buf := bytes.NewBuffer(data)
-				fmt.Printf("Read `%+v` from %s\n", buf.Bytes(), path)
 				field.SetString(strings.TrimSpace(buf.String()))
 				continue
 			}
