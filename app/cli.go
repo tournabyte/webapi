@@ -25,7 +25,7 @@ var rootCmd *cobra.Command = &cobra.Command{
 }
 
 // Variable `appConfig` holds the application configuration user for CLI invokations
-var appConfig *AppConfig = NewAppConfig("json", "appconf", []string{"/etc/tournabyte/webapi", "$HOME/.local/tournabyte/webapi", "."})
+var appConfig *AppConfig = NewAppConfig("json", "webapi", []string{"/etc/tournabyte", "$HOME/.local/tournabyte", "."})
 
 // Function `init` initializes the CLI's subcommands
 func init() {
