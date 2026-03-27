@@ -72,11 +72,12 @@ func TestInit(t *testing.T) {
 func TestInitAppContext_WithValidConfig(t *testing.T) {
 	// Create a temporary config file for testing
 	etcDir := t.TempDir()
-	configPath := etcDir + "/appconf.json"
+	configPath := etcDir + "/webapi.json"
 
 	secretsDir := t.TempDir()
 	tokenKeyPath := secretsDir + "/signing_key"
 	dbAccessKey := secretsDir + "/mongo_access_key"
+	dbSecretKey := secretsDir + "/mongo_secret_key"
 	s3AccessKey := secretsDir + "/minio_access_key"
 	s3SecretKey := secretsDir + "/minio_secret_key"
 
@@ -88,6 +89,7 @@ func TestInitAppContext_WithValidConfig(t *testing.T) {
 		"chainFile":       tlsChainKey,
 		"jwtkeyFile":      tokenKeyPath,
 		"mongoAccessFile": dbAccessKey,
+		"mongoKeyFile":    dbSecretKey,
 		"minioIDFile":     s3AccessKey,
 		"minioKeyFile":    s3SecretKey,
 	}
@@ -115,8 +117,8 @@ func TestInitAppContext_WithValidConfig(t *testing.T) {
       "mongodb02.tournabyte.com",
       "mongodb03.tournabyte.com"
     ],
-    "username": "mongoadmin01",
-    "password": "{{.mongoAccessFile}}"
+    "username": "{{.mongoAccessFile}}",
+    "password": "{{.mongoKeyFile}}"
   },
   "minio": {
     "endpoint": "localhost:9000",
@@ -147,7 +149,10 @@ func TestInitAppContext_WithValidConfig(t *testing.T) {
 	err = os.WriteFile(tokenKeyPath, []byte("token"), 0600)
 	require.NoError(t, err)
 
-	err = os.WriteFile(dbAccessKey, []byte("db"), 0600)
+	err = os.WriteFile(dbAccessKey, []byte("dbuser"), 0600)
+	require.NoError(t, err)
+
+	err = os.WriteFile(dbSecretKey, []byte("dbkey"), 0600)
 	require.NoError(t, err)
 
 	err = os.WriteFile(s3AccessKey, []byte("s3ID"), 0600)
@@ -163,7 +168,7 @@ func TestInitAppContext_WithValidConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a test app config with the temp directory
-	testConfig := NewAppConfig("json", "appconf", []string{etcDir})
+	testConfig := NewAppConfig("json", "webapi", []string{etcDir})
 
 	// Save original appConfig and restore it after test
 	originalAppConfig := appConfig
