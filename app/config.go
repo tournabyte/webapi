@@ -222,7 +222,7 @@ type securityOptions struct {
 //   - Password: the security response to use when challenged by the database authentication request
 type databaseOptions struct {
 	Hosts    []string `mapstructure:"hosts"`
-	Username string   `mapstructure:"username"`
+	Username string   `mapstructure:"username" fromfile:"required,perm=0600"`
 	Password string   `mapstructure:"password" fromfile:"required,perm=0600"`
 }
 
