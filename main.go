@@ -1,7 +1,7 @@
 package main
 
 /*
- * File: app/start/main.go
+ * File: main.go
  *
  * Purpose: main entry point into the Tournabyte API application
  *
@@ -11,9 +11,9 @@ package main
  *
  */
 
-import "github.com/tournabyte/webapi/app"
+import cli "github.com/tournabyte/webapi/cmd"
 
-// Tournabyte API entry point
+// Function `main` is the antry point to the Tournabyte web API application
 func main() {
-	app.Execute()
+	cli.Execute()
 }
