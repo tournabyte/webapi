@@ -32,11 +32,13 @@ const (
 	bindCheckflagHelpMsg  = "Enable/disable unmarshalling configuration file to program memory. Implies the --syntax flag."
 )
 
+// Check subcommand level flags
 var (
 	checkSyntax  *bool
 	checkLoading *bool
 )
 
+// Variable `validationCmd` holds a pointer to a `cobra.Command` representing the check subcommand CLI
 var validationCmd *cobra.Command = &cobra.Command{
 	Use:   checkCmdUsageMsg,
 	Short: checkCmdShortHelp,
@@ -49,6 +51,7 @@ var validationCmd *cobra.Command = &cobra.Command{
 	RunE: doCheck,
 }
 
+// Function `init` contains the initialization logic to perform on `validationCmd`
 func init() {
 	checkSyntax = validationCmd.Flags().Bool(
 		syntaxCheckFlag,
@@ -63,6 +66,7 @@ func init() {
 	)
 }
 
+// Function `doCheck` contains the runtime logic associated with running the `validationCmd`
 func doCheck(cmd *cobra.Command, args []string) error {
 	if *checkLoading {
 		return appConfig.Bind()

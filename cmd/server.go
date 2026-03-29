@@ -29,6 +29,7 @@ const (
 	listeningPortFlagOverrideKey = "serve.port"
 )
 
+// Server subcommand level flags
 var (
 	serverPort *int
 )
@@ -48,6 +49,7 @@ var serverCmd *cobra.Command = &cobra.Command{
 	RunE: doServe,
 }
 
+// Function `init` contains the initialization logic to perform on `serverCmd`
 func init() {
 	serverPort = serverCmd.Flags().Int(
 		listeningPortFlag,
@@ -56,6 +58,7 @@ func init() {
 	)
 }
 
+// Function `doServe` contains the runtime logic associated with running the `serverCmd`
 func doServe(cmd *cobra.Command, args []string) error {
 	log.Printf("Starting server process...")
 	return nil
