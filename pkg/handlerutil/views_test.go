@@ -23,7 +23,7 @@ import (
 )
 
 func setupResponseTestRouter() *gin.Engine {
-	router := gin.Default()
+	router := gin.New()
 
 	router.GET("/ok", func(ctx *gin.Context) {
 		handlerutil.RespondWithRequestedData(ctx, gin.H{"someData": 5}, http.StatusOK)
@@ -71,9 +71,7 @@ func TestResponseFormatting(t *testing.T) {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest("GET", "/error", nil)
 
-		server.ServeHTTP(w, r)
-		statusCode := w.Code
+		assert.Panics(t, func() { server.ServeHTTP(w, r) })
 
-		assert.Equal(t, http.StatusInternalServerError, statusCode)
 	})
 }
