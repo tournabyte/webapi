@@ -13,6 +13,7 @@ package handlerutil_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -75,7 +76,8 @@ func TestWorkSpaceReadWrite(t *testing.T) {
 }
 
 func TestStepwiseProcessing(t *testing.T) {
-	doubleIt := func(ws *handlerutil.HandlerWorkspace) error {
+	ErrNegativeInput := errors.New("Expected a positive input")
+	doubleIt := func(ctx context.Context, ws *handlerutil.HandlerWorkspace) error {
 		var i int
 		if err := ws.Get("X", &i); err != nil {
 			return err
@@ -84,19 +86,19 @@ func TestStepwiseProcessing(t *testing.T) {
 		ws.Set("X", i)
 		return nil
 	}
-	ensurePositive := func(ws *handlerutil.HandlerWorkspace) error {
+	ensurePositive := func(ctx context.Context, ws *handlerutil.HandlerWorkspace) error {
 		var i int
 		if err := ws.Get("X", &i); err != nil {
 			return err
 		}
 		if i <= 0 {
-			return fmt.Errorf("Expected a positive input, got %d", i)
+			return fmt.Errorf("%w: got %d", ErrNegativeInput, i)
 		}
 		return nil
 	}
 
-	workflow := func() (context.Context, context.CancelCauseFunc, chan<- *handlerutil.HandlerWorkspace, <-chan *handlerutil.HandlerWorkspace) {
-		ctx, cancel := context.WithCancelCause(context.Background())
+	workflow := func(ctx context.Context) (context.Context, context.CancelCauseFunc, chan<- *handlerutil.HandlerWorkspace, <-chan *handlerutil.HandlerWorkspace) {
+		ctx, cancel := context.WithCancelCause(ctx)
 		in := make(chan *handlerutil.HandlerWorkspace)
 
 		out1 := handlerutil.Stage(ctx, cancel, doubleIt, in)
@@ -108,7 +110,7 @@ func TestStepwiseProcessing(t *testing.T) {
 	t.Run("Completed", func(t *testing.T) {
 		space := handlerutil.DefaultWorkspace()
 		space.Set("X", 50)
-		ctx, cancel, in, out := workflow()
+		ctx, cancel, in, out := workflow(context.Background())
 		defer cancel(nil)
 		defer close(in)
 
@@ -131,7 +133,7 @@ func TestStepwiseProcessing(t *testing.T) {
 	t.Run("Interrupted", func(t *testing.T) {
 		space := handlerutil.DefaultWorkspace()
 		space.Set("X", -50)
-		ctx, cancel, in, out := workflow()
+		ctx, cancel, in, out := workflow(context.Background())
 		defer cancel(nil)
 		defer close(in)
 
