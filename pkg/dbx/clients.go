@@ -15,8 +15,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"net/url"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -24,6 +22,23 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
+// Errors for attempting to access invalid session pointers
+var (
+	ErrInvalidSessConfig = errors.New("invalid session configuration")
+	ErrNoSessInCtx       = errors.New("provided context did not have a session value")
+)
+
+// Function `NewOptions` creates a config object with the provided option setter functions
+//
+// Type Parameters:
+//   - C: the config object to be created and configured by setters
+//
+// Parameters:
+//   - ...opts: variadic sequence of option setters to apply to the created configuration object
+//
+// Returns:
+//   - `*C`: pointer to the created and configured configuration object
+//   - `error`: issue that occurred during object configuration (nil if no issue occurred)
 func NewOptions[C any](opts ...OptionSetter[C]) (*C, error) {
 	var config *C = new(C)
 
@@ -36,30 +51,50 @@ func NewOptions[C any](opts ...OptionSetter[C]) (*C, error) {
 	return config, nil
 }
 
-// Function `defaultFactory` provides a data structure implementing the `DriverClient` interface. This default option simply wraps the `mongo.Connect` function and returns the corresponding result
+// Function `MongoFromContext` retrieves the pointer to the `mongo.Session` pointer value within the provided context
 //
 // Parameters:
-//   - ...opts: the sequence of `options.ClientOptions` to configure the resulting connection
+//   - ctx: the context to retrieve the `mongo.Session` from (if it exists)
 //
 // Returns:
-//   - `DriverClient`: data structure implementing the critical operations needed to manage a database connection lifecycle
-//   - `error`: issue reported when attempting to create the database connection (nil if connection created successfully)
-func defaultFactory(opts ...*options.ClientOptions) (*mongo.Client, error) {
-	return mongo.Connect(opts...)
+//   - `*mongo.Session`: pointer to the session stored within the context
+//   - `error`: the error that occurred when attempting to read the session value
+func MongoFromContext(ctx context.Context) (*mongo.Session, error) {
+	if sess := mongo.SessionFromContext(ctx); sess == nil {
+		return nil, ErrNoSessInCtx
+	} else {
+		return sess, nil
+	}
 }
 
-// Function signature for a mongo client factory
-type DriverClientFactory func(...*options.ClientOptions) (*mongo.Client, error)
+// Function `MinioFromContext` retrieves the pointer to the `minio.Client` pointer value within the provided context
+//
+// Parameters:
+//   - ctx: the context to retrieve the `minio.Client` from (if it exists)
+//
+// Returns:
+//   - `*minio.Client`: pointer to the client stored within the context
+//   - `error`: the error that occurred when attempting to read the session value
+func MinioFromContext(ctx context.Context) (*minio.Client, error) {
+	val := ctx.Value(minioSessionKey{})
+	if val == nil {
+		return nil, ErrNoSessInCtx
+	}
 
-// Variable `clientFactory` points to the factory function that will be used to create mongo clients
-var ClientFactory DriverClientFactory = defaultFactory
+	sess, ok := val.(*minio.Client)
+	if !ok {
+		return nil, ErrNoSessInCtx
+	}
 
-// Type `DatabaseConnection` wraps the `mongo.Client` object to make lifecycle management easier
+	return sess, nil
+}
+
+// Type `MongoConnection` wraps the `mongo.Client` object to make lifecycle management easier
 //
 // Members:
 //   - client: pointer to the instance implementing the `mongo.Client` under management
 //   - options: configuration object for creating the corresponding driver client instance
-type DatabaseConnection struct {
+type MongoConnection struct {
 	client  *mongo.Client
 	options *options.ClientOptions
 }
@@ -69,16 +104,16 @@ type DatabaseConnection struct {
 //   - ...opts: variadic sequence of options to specify how the connection should be configured
 //
 // Returns:
-//   - `DatabaseConnection`: the resulting established mongodb connection with client and configuration information available for lifecycle management
+//   - `*MongoConnection`: the resulting established mongodb connection with client and configuration information available for lifecycle management
 //   - `error`: the issue that occurred when attempting to create the specified connection (nil if no issue occurred)
-func NewMongoConnection(opts ...OptionSetter[options.ClientOptions]) (*DatabaseConnection, error) {
-	var conn DatabaseConnection
+func NewMongoConnection(opts ...OptionSetter[options.ClientOptions]) (*MongoConnection, error) {
+	var conn MongoConnection
 	var connectTimeout time.Duration
 
 	if config, configErr := NewOptions(opts...); configErr != nil {
 		return nil, configErr
 	} else {
-		connect, connectErr := ClientFactory(config)
+		connect, connectErr := mongo.Connect(config)
 		if connectErr != nil {
 			return nil, connectErr
 		}
@@ -110,7 +145,7 @@ func NewMongoConnection(opts ...OptionSetter[options.ClientOptions]) (*DatabaseC
 //
 // Returns:
 //   - `error`: the issue that occurred during the disconnect sequence (nil if no issue occurred)
-func (db *DatabaseConnection) Disconnect(ctx context.Context) error {
+func (db *MongoConnection) Disconnect(ctx context.Context) error {
 	return db.client.Disconnect(ctx)
 }
 
@@ -122,9 +157,9 @@ func (db *DatabaseConnection) Disconnect(ctx context.Context) error {
 // Returns:
 //   - `context.Context`: a child context containing a `mongo.Session` for future use
 //   - `error`: issue that occurred during session setup (nil if no issue occurred)
-func (db *DatabaseConnection) SetUpSession(ctx context.Context, opts ...options.Lister[options.SessionOptions]) (context.Context, error) {
+func (db *MongoConnection) SetUpSession(ctx context.Context, opts ...options.Lister[options.SessionOptions]) (context.Context, error) {
 	if sess, err := db.client.StartSession(opts...); err != nil {
-		return nil, fmt.Errorf("session could not be started: %w", err)
+		return nil, fmt.Errorf("%w: %v", ErrInvalidSessConfig, err)
 	} else {
 		return mongo.NewSessionContext(ctx, sess), nil
 	}
@@ -137,9 +172,9 @@ func (db *DatabaseConnection) SetUpSession(ctx context.Context, opts ...options.
 //
 // Returns:
 //   - `error`: issue that occurred when attempting to wrap up the session (nil if no issue occurred)
-func (db *DatabaseConnection) TearDownSession(ctx context.Context) error {
+func (db *MongoConnection) TearDownSession(ctx context.Context) error {
 	if sess := mongo.SessionFromContext(ctx); sess == nil {
-		return errors.New("no active session to close")
+		return ErrNoSessInCtx
 	} else {
 		sess.EndSession(ctx)
 		return nil
@@ -153,9 +188,9 @@ func (db *DatabaseConnection) TearDownSession(ctx context.Context) error {
 //
 // Returns:
 //   - `error`: issue that occured when initializing a transaction (nil if no issue occurred)
-func (db *DatabaseConnection) BeginTransaction(ctx context.Context, opts ...options.Lister[options.TransactionOptions]) error {
+func (db *MongoConnection) BeginTransaction(ctx context.Context, opts ...options.Lister[options.TransactionOptions]) error {
 	if sess := mongo.SessionFromContext(ctx); sess == nil {
-		return errors.New("no active session to upgrade")
+		return ErrNoSessInCtx
 
 	} else {
 		return sess.StartTransaction(opts...)
@@ -169,9 +204,9 @@ func (db *DatabaseConnection) BeginTransaction(ctx context.Context, opts ...opti
 //
 // Returns:
 //   - `error`: issue that occurred during transaction commit (nil if no issue occurred)
-func (db *DatabaseConnection) CommitTransaction(ctx context.Context) error {
+func (db *MongoConnection) CommitTransaction(ctx context.Context) error {
 	if sess := mongo.SessionFromContext(ctx); sess == nil {
-		return errors.New("no active transaction to commit")
+		return ErrNoSessInCtx
 	} else {
 		return sess.CommitTransaction(ctx)
 	}
@@ -184,9 +219,9 @@ func (db *DatabaseConnection) CommitTransaction(ctx context.Context) error {
 //
 // Returns:
 //   - `error`: issue that occurred during transaction abort (nil if no issue occurred)
-func (db *DatabaseConnection) AbortTransaction(ctx context.Context) error {
+func (db *MongoConnection) AbortTransaction(ctx context.Context) error {
 	if sess := mongo.SessionFromContext(ctx); sess == nil {
-		return errors.New("no active transaction to rollback")
+		return ErrNoSessInCtx
 	} else {
 		return sess.AbortTransaction(ctx)
 	}
@@ -194,13 +229,16 @@ func (db *DatabaseConnection) AbortTransaction(ctx context.Context) error {
 
 // Type `MinioConnection` represents a connection to the MinIO service as the associated options
 //
-// Struct members:
+// Members:
 //   - client: the managed client instance connecting to a MinIO instance
 //   - options: the connection options used in client creation
 type MinioConnection struct {
 	client  *minio.Client
 	options *minio.Options
 }
+
+// Type `minioSessionKey` is an internal context key for minio clients attached to a context
+type minioSessionKey struct{}
 
 // Function `NewMinioConnection` creates the MinioConnection instance from the given endpoint and connection option setters
 //
@@ -219,108 +257,27 @@ func NewMinioConnection(endpoint string, opts ...OptionSetter[minio.Options]) (*
 		if conn, err := minio.New(endpoint, cfg); err != nil {
 			return nil, err
 		} else {
-			conn.SetAppInfo("Tournabyte API", "v1")
 			return &MinioConnection{client: conn, options: cfg}, nil
 		}
 	}
 }
 
-// Function `(*MinioConnection).GetLink` retrieve a URL to download the object specified by the given bucket and key directly from the minio instance
+// Function `(*MinioConnection).SetApplicationInfo` sets application info on the underlying client
 //
 // Parameters:
-//   - ctx: context managing the lifecycle of the URL generation operation
-//   - bucket: the bucket name containing the target object
-//   - key: the unique identifier (within bucket) of the target object
-//   - notValidAfter: the duration the generated URL should be valid for
-//
-// Returns:
-//   - `*url.URL`: the generated URL to retrieve the specified object
-//   - `error`: issue that occurred during URL generation (nil if the generation succeeded)
-func (conn *MinioConnection) GetLink(ctx context.Context, bucket string, key string, notValidAfter time.Duration) (*url.URL, error) {
-	return conn.client.PresignedGetObject(
-		ctx,
-		bucket,
-		key,
-		notValidAfter,
-		url.Values{},
-	)
+//   - name: the name portion of the application info
+//   - version: the version portion of the application info
+func (conn *MinioConnection) SetApplicationInfo(name string, version string) {
+	conn.client.SetAppInfo(name, version)
 }
 
-// Function `(*MinioConnection).PutLink` retrieve a URL to upload an object to the specified bucket and key directly to the minio instance
+// Function `(*MinioConnection).SetUpSession` initializes a minio client session within the given context
 //
 // Parameters:
-//   - ctx: context managing the lifecycle of the URL generation operation
-//   - bucket: the bucket name containing the target object
-//   - key: the unique identifier (within bucket) of the target object
-//   - notValidAfter: the duration the generated URL should be valid for
+//   - ctx: the context to set up the session within
 //
 // Returns:
-//   - `*url.URL`: the generated URL to retrieve the specified object
-//   - `error`: issue that occurred during URL generation (nil if the generation succeeded)
-func (conn *MinioConnection) PutLink(ctx context.Context, bucket string, key string, notValidAfter time.Duration) (*url.URL, error) {
-	return conn.client.PresignedPutObject(
-		ctx,
-		bucket,
-		key,
-		notValidAfter,
-	)
-}
-
-// Function `(*MinioConnection).Put` uploads the contents to the minio connection instance under the specified bucket and key
-//
-// Parameters:
-//   - ctx: context managing the lifecycle of the put operation
-//   - bucket: name of the bucket the upload should target
-//   - key: unique object key to identify the uploaded object
-//   - contents: the stuff to upload
-//   - sz: the size of the stuff being uploaded
-//   - ...opts: options for modifying the upload behavior
-//
-// Returns:
-//   - `minio.UploadInfo`: pointer to the information about the upload operation
-//   - `error`: issue that occured during the upload operation (nil if operation succeeded)
-func (conn *MinioConnection) Put(ctx context.Context, bucket string, key string, contents io.Reader, sz int64, opts ...OptionSetter[minio.PutObjectOptions]) (*minio.UploadInfo, error) {
-	var cfg minio.PutObjectOptions
-	for _, opt := range opts {
-		if err := opt(&cfg); err != nil {
-			return nil, err
-		}
-	}
-
-	res, err := conn.client.PutObject(
-		ctx,
-		bucket,
-		key,
-		contents,
-		sz,
-		cfg,
-	)
-
-	return &res, err
-}
-
-// Function `(*MinioConnection).Delete` removes the object specified by the given bucket and key
-//
-// Parameters:
-//   - ctx: context managing the lifecycle of the delete operation
-//   - bucket: bucket name containing the object to delete
-//   - key: unique identifier (within bucket) of object to delete
-//   - ...opts: options for modifying the delete behavior
-//
-// Returns:
-//   - `error`: issue that occurred during the delte operation (nil if the operation succeeded)
-func (conn *MinioConnection) Delete(ctx context.Context, bucket string, key string, opts ...OptionSetter[minio.RemoveObjectOptions]) error {
-	var cfg minio.RemoveObjectOptions
-	for _, opt := range opts {
-		if err := opt(&cfg); err != nil {
-			return err
-		}
-	}
-
-	return conn.client.RemoveObject(
-		ctx,
-		bucket,
-		key,
-		cfg,
-	)
+//   - `context.Context`: the context with the client as a key/value pair
+func (conn *MinioConnection) SetUpSession(ctx context.Context) context.Context {
+	return context.WithValue(ctx, minioSessionKey{}, conn.client)
 }

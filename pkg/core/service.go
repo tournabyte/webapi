@@ -40,7 +40,7 @@ import (
 // Returns:
 //   - `DatabaseConnection` the resulting establish mongodb connection with client and configuration information available
 //   - `error`: the issue that occurred when attempting to create the specified connection (nil if no issue occurred)
-func mongoClientFromConfig(cfg *models.ApplicationOptions) (*dbx.DatabaseConnection, error) {
+func mongoClientFromConfig(cfg *models.ApplicationOptions) (*dbx.MongoConnection, error) {
 	return dbx.NewMongoConnection(
 		dbx.MongoClientAppName("Tournabyte API"),
 		dbx.MongoClientCredentials(cfg.RecordStore.Username, cfg.RecordStore.Password),
@@ -177,7 +177,7 @@ func makeHandler(lvl string, dst []string, useJSON bool, useSource bool) (slog.H
 type tournabyteAPIService struct {
 	router         *gin.Engine
 	logger         *slog.Logger
-	db             *dbx.DatabaseConnection
+	db             *dbx.MongoConnection
 	s3             *dbx.MinioConnection
 	sess           jose.Signer
 	validationFunc *validator.Validate

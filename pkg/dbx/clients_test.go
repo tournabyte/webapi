@@ -321,32 +321,11 @@ func TestMongoConnectionLifecycle(t *testing.T) {
 		assert.Error(t, err)
 		assert.Nil(t, db)
 	})
-
-	t.Run("CannotCreateClient", func(t *testing.T) {
-		badFactory := func(opts ...*options.ClientOptions) (*mongo.Client, error) {
-			return nil, errors.New("client creation failure")
-		}
-
-		original := dbx.ClientFactory
-		dbx.ClientFactory = badFactory
-		defer func() {
-			dbx.ClientFactory = original
-		}()
-
-		conn, err := dbx.NewMongoConnection(
-			dbx.MongoClientAppName("dbxtestcase"),
-			dbx.MongoClientHosts("127.0.0.1:27017"),
-			dbx.DirectConnection(true),
-		)
-
-		assert.Errorf(t, err, "client creation failure")
-		assert.Nil(t, conn)
-	})
 }
 
 func TestMongoSessionLifecycle(t *testing.T) {
 	var ctx = context.Background()
-	var conn *dbx.DatabaseConnection
+	var conn *dbx.MongoConnection
 
 	t.Run("SetupConnection", func(t *testing.T) {
 		m := drivertest.NewMockDeployment(
@@ -380,7 +359,7 @@ func TestMongoSessionLifecycle(t *testing.T) {
 
 func TestMongoTxnLifecycle(t *testing.T) {
 	var ctx = context.Background()
-	var conn *dbx.DatabaseConnection
+	var conn *dbx.MongoConnection
 
 	t.Run("SetupConnection", func(t *testing.T) {
 		m := drivertest.NewMockDeployment(
@@ -432,4 +411,87 @@ func TestMinioConnectionLifecycle(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.NotNil(t, conn)
+}
+
+func TestDataClientsFromContext(t *testing.T) {
+	var mongoConn *dbx.MongoConnection
+	var minioConn *dbx.MinioConnection
+	var setupErr error
+
+	m := drivertest.NewMockDeployment(
+		bson.D{{Key: "ok", Value: 1}},
+	)
+	mongoConn, setupErr = dbx.NewMongoConnection(
+		dbx.ConnectionDeployment(m),
+		dbx.MongoClientAppName("dbxtestcase"),
+		dbx.MongoClientHosts("127.0.0.1:27017"),
+		dbx.DirectConnection(true),
+	)
+
+	require.NoError(t, setupErr)
+
+	minioConn, setupErr = dbx.NewMinioConnection(
+		"minio.example.com:9000",
+		dbx.MinioMaxRetries(5),
+		dbx.MinioUseSecureConnection(false),
+		dbx.MinioStaticCredentials("dbxtestcaseid", "dbxtestcasekey"),
+	)
+
+	require.NoError(t, setupErr)
+
+	t.Run("FoundMongoAndMinio", func(t *testing.T) {
+		ctx := context.Background()
+		ctx2, err := mongoConn.SetUpSession(ctx)
+		require.NoError(t, err)
+
+		ctx3 := minioConn.SetUpSession(ctx2)
+
+		mongoSess, mongoErr := dbx.MongoFromContext(ctx3)
+		require.NoError(t, mongoErr)
+		assert.NotNil(t, mongoSess)
+
+		minioSess, minioErr := dbx.MinioFromContext(ctx3)
+		require.NoError(t, minioErr)
+		assert.NotNil(t, minioSess)
+	})
+
+	t.Run("FoundMongoButNotMinio", func(t *testing.T) {
+		ctx := context.Background()
+		ctx2, err := mongoConn.SetUpSession(ctx)
+		require.NoError(t, err)
+
+		mongoSess, mongoErr := dbx.MongoFromContext(ctx2)
+		require.NoError(t, mongoErr)
+		assert.NotNil(t, mongoSess)
+
+		minioSess, minioErr := dbx.MinioFromContext(ctx2)
+		require.Error(t, minioErr)
+		assert.Nil(t, minioSess)
+	})
+
+	t.Run("FoundMinioButNotMongo", func(t *testing.T) {
+		ctx := context.Background()
+		ctx2 := minioConn.SetUpSession(ctx)
+
+		mongoSess, mongoErr := dbx.MongoFromContext(ctx2)
+		require.Error(t, mongoErr)
+		assert.Nil(t, mongoSess)
+
+		minioSess, minioErr := dbx.MinioFromContext(ctx2)
+		require.NoError(t, minioErr)
+		assert.NotNil(t, minioSess)
+	})
+
+	t.Run("FoundNeitherMongoAndMinio", func(t *testing.T) {
+		ctx := context.Background()
+
+		minioSess, minioErr := dbx.MinioFromContext(ctx)
+		require.Error(t, minioErr)
+		assert.Nil(t, minioSess)
+
+		mongoSess, mongoErr := dbx.MongoFromContext(ctx)
+		require.Error(t, mongoErr)
+		assert.Nil(t, mongoSess)
+	})
+
 }
