@@ -234,6 +234,7 @@ func NewTournabyteService(options *models.ApplicationOptions) (*tournabyteAPISer
 // Returns:
 //   - `error`: issue that occurred during server shutdown
 func (srv *tournabyteAPIService) Run() error {
+	srv.registerRoutes()
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", srv.opts.Serve.Port),
 		Handler: srv.router,
@@ -275,4 +276,24 @@ func (srv *tournabyteAPIService) Run() error {
 	srv.db.Disconnect(ctx)
 	log.Println("Server exited gracefully")
 	return nil
+}
+
+func (srv *tournabyteAPIService) addGlobalMiddleware() {
+	srv.router.Use(gin.CustomRecovery(srv.recoverPanicAsFailure))
+	srv.router.Use(srv.assignRequestIdentifier)
+	srv.router.Use(srv.markRequestStartTimestamp)
+}
+
+func (srv *tournabyteAPIService) registerRoutes() {
+	srv.addGlobalMiddleware()
+
+	{
+		// /v1/...
+		v1 := srv.router.Group("v1")
+		srv.addAuthGroup(v1)
+	}
+}
+
+func (srv *tournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
+	parentGroup.Group("auth")
 }
