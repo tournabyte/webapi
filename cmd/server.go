@@ -16,6 +16,7 @@ import (
 	"log"
 
 	"github.com/spf13/cobra"
+	"github.com/tournabyte/webapi/pkg/core"
 )
 
 // Server command level CLI constants
@@ -61,5 +62,9 @@ func init() {
 // Function `doServe` contains the runtime logic associated with running the `serverCmd`
 func doServe(cmd *cobra.Command, args []string) error {
 	log.Printf("Starting server process...")
-	return nil
+	if service, serviceErr := core.NewTournabyteService(&appConfig.Options); serviceErr != nil {
+		return serviceErr
+	} else {
+		return service.Run()
+	}
 }
