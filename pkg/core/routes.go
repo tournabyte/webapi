@@ -11,7 +11,13 @@ package core
  *
  */
 
-import "github.com/gin-gonic/gin"
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"github.com/tournabyte/webapi/pkg/handlerutil"
+	"github.com/tournabyte/webapi/pkg/models"
+)
 
 func (srv *tournabyteAPIService) addGlobalMiddleware() {
 	srv.router.Use(gin.CustomRecovery(srv.recoverPanicAsFailure))
@@ -30,5 +36,26 @@ func (srv *tournabyteAPIService) registerRoutes() {
 }
 
 func (srv *tournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
-	parentGroup.Group("auth")
+	authGroup := parentGroup.Group("users")
+
+	// POST /v1/users
+	authGroup.POST(
+		"/",
+		srv.withMongoSession,
+		srv.withMongoTransaction,
+		handlerutil.HandlerTemplate(
+			initUserCreationWorkspace,
+			userCreationPipeline,
+			handlerutil.AwaitAndRespondAs[models.AuthenticatedUser],
+			http.StatusCreated,
+			userAuthorizationResponseKey,
+			srv.errfmt,
+		),
+	)
+
+	// POST /v1/users/tokens
+
+	// DELETE /v1/users/tokens/{id}
+
+	// PUT /v1/users/credentials
 }

@@ -31,12 +31,12 @@ var (
 	ErrInternalServerError = handlerFailureFactory(http.StatusInternalServerError, failedToRunWithoutIssue)
 )
 
-// Type `handlerFailureFormatter` utilizes predicate-based matching rules to format errors as `handlerFailure` instances
+// Type `HandlerFailureFormatter` utilizes predicate-based matching rules to format errors as `handlerFailure` instances
 //
 // Members
 //   - rules: matching predicates that determine if a given error coincides with a specific handler failure structure
 //   - fallback: a last resort "catch-all" to convert the given error to a `handlerFailure` is not rules were satisfied
-type handlerFailureFormatter struct {
+type HandlerFailureFormatter struct {
 	rules    []func(error) (error, bool)
 	fallback func(...errorDetail) handlerFailure
 }
@@ -48,8 +48,8 @@ type handlerFailureFormatter struct {
 //
 // Returns:
 //   - `handlerFailureFormatter`: the formatter to translate arbitrary errors into structured handler failures
-func FailureFormatter(rules ...func(error) (error, bool)) handlerFailureFormatter {
-	return handlerFailureFormatter{
+func FailureFormatter(rules ...func(error) (error, bool)) HandlerFailureFormatter {
+	return HandlerFailureFormatter{
 		rules:    rules,
 		fallback: ErrInternalServerError,
 	}
@@ -62,7 +62,7 @@ func FailureFormatter(rules ...func(error) (error, bool)) handlerFailureFormatte
 //
 // Returns:
 //   - `error`: a wrapped error that statisfies `errors.Is(handlerFailure)`
-func (fmt *handlerFailureFormatter) Format(err error) error {
+func (fmt *HandlerFailureFormatter) Format(err error) error {
 	for _, rule := range fmt.rules {
 		if wrapped, isWrapped := rule(err); isWrapped {
 			return wrapped

@@ -27,7 +27,7 @@ type WorkspaceInit func(*gin.Context) *HandlerWorkspace
 type WorkflowStarter func(context.Context) (context.Context, context.CancelCauseFunc, chan<- *HandlerWorkspace, <-chan *HandlerWorkspace)
 
 // Type `WorkflowWaiter` is a function pointer that awaits the pipeline exit signals and processes the result
-type WorkflowWaiter func(context.Context, *gin.Context, <-chan *HandlerWorkspace, int, string, *handlerFailureFormatter)
+type WorkflowWaiter func(context.Context, *gin.Context, <-chan *HandlerWorkspace, int, string, *HandlerFailureFormatter)
 
 // Type `TransitionFn` represents a processing step within a pipeline that works with a given `HandlerWorkspace`.
 // It should work with the workspace in-place and return an error to indicate failure
@@ -123,7 +123,7 @@ func HandlerTemplate(
 	await WorkflowWaiter,
 	successCode int,
 	successDataKey string,
-	errfmt *handlerFailureFormatter,
+	errfmt *HandlerFailureFormatter,
 ) gin.HandlerFunc {
 	return func(req *gin.Context) {
 		ctx, cancel, in, out := pipeline(req.Request.Context())
@@ -186,7 +186,7 @@ func Stage(ctx context.Context, cancelFunc context.CancelCauseFunc, t Transition
 //   - code: the success code to include with a successful response
 //   - data: the key that can be used to read the success data from the workspace
 //   - errfmt: the error formatter that can be used to translate any pipeline error to a reasonable HTTP response
-func AwaitAndRespondAs[T any](ctx context.Context, req *gin.Context, out <-chan *HandlerWorkspace, code int, data string, errfmt *handlerFailureFormatter) {
+func AwaitAndRespondAs[T any](ctx context.Context, req *gin.Context, out <-chan *HandlerWorkspace, code int, data string, errfmt *HandlerFailureFormatter) {
 	select {
 	case <-ctx.Done():
 		err := errfmt.Format(context.Cause(ctx))

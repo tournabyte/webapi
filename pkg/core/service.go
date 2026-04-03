@@ -30,6 +30,7 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-playground/validator/v10"
 	"github.com/tournabyte/webapi/pkg/dbx"
+	"github.com/tournabyte/webapi/pkg/handlerutil"
 	"github.com/tournabyte/webapi/pkg/models"
 )
 
@@ -165,6 +166,10 @@ func makeHandler(lvl string, dst []string, useJSON bool, useSource bool) (slog.H
 	return handler, nil
 }
 
+func initErrorFormatter() *handlerutil.HandlerFailureFormatter {
+	return &handlerutil.HandlerFailureFormatter{}
+}
+
 // Type `tournabyteAPIService` represents the API server for the tournabyte platform
 //
 // Members:
@@ -177,6 +182,7 @@ func makeHandler(lvl string, dst []string, useJSON bool, useSource bool) (slog.H
 type tournabyteAPIService struct {
 	router         *gin.Engine
 	logger         *slog.Logger
+	errfmt         *handlerutil.HandlerFailureFormatter
 	db             *dbx.MongoConnection
 	s3             *dbx.MinioConnection
 	sess           jose.Signer
@@ -220,6 +226,7 @@ func NewTournabyteService(options *models.ApplicationOptions) (*tournabyteAPISer
 	return &tournabyteAPIService{
 		router:         gin.New(),
 		logger:         logger,
+		errfmt:         initErrorFormatter(),
 		db:             db,
 		s3:             s3,
 		sess:           jwt,
