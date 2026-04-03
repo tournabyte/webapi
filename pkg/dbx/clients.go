@@ -281,3 +281,53 @@ func (conn *MinioConnection) SetApplicationInfo(name string, version string) {
 func (conn *MinioConnection) SetUpSession(ctx context.Context) context.Context {
 	return context.WithValue(ctx, minioSessionKey{}, conn.client)
 }
+
+// Type `DocumentMetadata` represents common metatdata fields that can be attached to a document
+//
+// Fields:
+//   - Active: indicates the document should be accounted for the active counts
+//   - CreatedAt: the timestamp of document creation
+//   - UpdatedAt: the timestamp of document modification
+type DocumentMetadata struct {
+	Active    bool      `bson:"active"`
+	CreatedAt time.Time `bson:"created_at"`
+	UpdatedAt time.Time `bson:"updated_at"`
+}
+
+// Function `InitialMetadata` constructs a `DocumentMetadata` instance corresponding to a newly created active document
+//
+// Returns:
+//   - `DocumentMetadata`: the metadata corresponding to a newly created active document
+func InitialMetadata() DocumentMetadata {
+	now := time.Now().UTC()
+	return DocumentMetadata{
+		Active:    true,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+}
+
+// Type `QueryContext` represents a mongodb database/collection pair that can be used to specify a database or collection target
+//
+// Fields:
+//   - Database: the database name
+//   - Collection: the collection name (within the database)
+type QueryContext struct {
+	Database   string
+	Collection string
+}
+
+// Function `NewQueryContext` creates query context instances for reference when specifying database operations
+//
+// Parameters:
+//   - db: the name of the database to target
+//   - coll: the name of the collection (within the database) to target
+//
+// Returns:
+//   - `QueryContext`: the database/collection pair for easy reference
+func NewQueryContext(db string, coll string) QueryContext {
+	return QueryContext{
+		Database:   db,
+		Collection: coll,
+	}
+}
