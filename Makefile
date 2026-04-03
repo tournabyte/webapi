@@ -1,6 +1,6 @@
 # Makefile for the Tournabyte webapi
 
-CMD_DIR  ?= $(shell pwd)/app/start
+CMD_DIR  ?= $(shell pwd)/main.go
 BUILD_DIR ?= $(shell pwd)/bin
 APP_NAME ?= tbyte-webapi
 
