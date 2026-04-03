@@ -1,0 +1,70 @@
+package cmd
+
+/*
+ * File: cmd/server.go
+ *
+ * Purpose: define the server subcommand instance for the CLI to the webapi application
+ *
+ * License:
+ *  See LICENSE.md for full license
+ *  Copyright 2026 Part of the Tournabyte project
+ *
+ */
+
+import (
+	"errors"
+	"log"
+
+	"github.com/spf13/cobra"
+	"github.com/tournabyte/webapi/pkg/core"
+)
+
+// Server command level CLI constants
+const (
+	serverCmdUsageMsg  = "server"
+	serverCmdShortHelp = "Starts the Tournabyte web API server process"
+
+	listeningPortFlag            = "port"
+	listeningPortDefaultValue    = 8080
+	listeningPortHelpMsg         = "The port the API server process should listen on"
+	listeningPortFlagOverrideKey = "serve.port"
+)
+
+// Server subcommand level flags
+var (
+	serverPort *int
+)
+
+// Variable `serverCmd` holds a pointer to the server `cobra.Command` struct representing the server subcommand CLI
+var serverCmd *cobra.Command = &cobra.Command{
+	Use:   serverCmdUsageMsg,
+	Short: serverCmdShortHelp,
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if appConfig == nil {
+			return errors.New("Application configuration manager is not present")
+		}
+		return appConfig.Bind(
+			OverrideFromFlag(listeningPortFlagOverrideKey, cmd.Flag(listeningPortFlag)),
+		)
+	},
+	RunE: doServe,
+}
+
+// Function `init` contains the initialization logic to perform on `serverCmd`
+func init() {
+	serverPort = serverCmd.Flags().Int(
+		listeningPortFlag,
+		listeningPortDefaultValue,
+		listeningPortHelpMsg,
+	)
+}
+
+// Function `doServe` contains the runtime logic associated with running the `serverCmd`
+func doServe(cmd *cobra.Command, args []string) error {
+	log.Printf("Starting server process...")
+	if service, serviceErr := core.NewTournabyteService(&appConfig.Options); serviceErr != nil {
+		return serviceErr
+	} else {
+		return service.Run()
+	}
+}
