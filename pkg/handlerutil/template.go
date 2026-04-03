@@ -40,6 +40,10 @@ var (
 	ErrNotAssignable  = errors.New("value cannot be assigned")
 )
 
+const (
+	RequestBindings = "requestBindingManager"
+)
+
 // Type `HandlerWorkspace` contains a synced key/value store for handlers to use as a scratchpad when processing requests
 //
 // Members:

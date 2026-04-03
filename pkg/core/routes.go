@@ -44,7 +44,7 @@ func (srv *tournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
 		srv.withMongoSession,
 		srv.withMongoTransaction,
 		handlerutil.HandlerTemplate(
-			initUserCreationWorkspace,
+			srv.initUserCreationWorkspace,
 			userCreationPipeline,
 			handlerutil.AwaitAndRespondAs[models.AuthenticatedUser],
 			http.StatusCreated,

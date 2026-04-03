@@ -284,3 +284,26 @@ func (srv *tournabyteAPIService) Run() error {
 	log.Println("Server exited gracefully")
 	return nil
 }
+
+// Function `(*tournabyteAPIService).getSessionConfig` isolates the session configuration specific options from the service options
+//
+// Returns:
+//   - `models.SessionOptions`: a structure housing information specific to session token generation and validation
+func (srv *tournabyteAPIService) getSessionConfig() models.SessionOptions {
+	return models.SessionOptions{
+		ExpiresIn: srv.opts.Serve.Sessions.RefreshTokenTTL,
+	}
+}
+
+// Function `(*tournabyteAPIService).getTokenConfig` isolates the token configuration specific options from the service options
+//
+// Returns:
+//   - `models.TokenOptions`: a structure housing information specific to access token generation and validation
+func (srv *tournabyteAPIService) getTokenConfig() models.TokenOptions {
+	return models.TokenOptions{
+		Signer:    srv.sess,
+		Subject:   srv.opts.Serve.Sessions.Subject,
+		Issuer:    srv.opts.Serve.Sessions.Issuer,
+		ExpiresIn: srv.opts.Serve.Sessions.AccessTokenTTL,
+	}
+}
