@@ -139,11 +139,14 @@ func TestStepwiseProcessing(t *testing.T) {
 
 		in <- &space
 
+		<-ctx.Done()
+		require.Error(t, context.Cause(ctx))
+
 		select {
-		case <-ctx.Done():
-			require.Error(t, context.Cause(ctx))
-		case <-out:
-			t.Fatal("Context should have been cancelled before reaching this point")
+		case _, ok := <-out:
+			require.False(t, ok, "Context should have been cancelled before reaching this point")
+		default:
+			break
 		}
 	})
 }
