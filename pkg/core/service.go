@@ -93,18 +93,19 @@ func tokenSignerFromConfig(cfg *models.ApplicationOptions) (jose.Signer, error) 
 // Returns:
 //   - `*slog.Logger`: the service logger
 //   - `error`: issue with logging setup (if any)
-func initLogs(cfg *models.ApplicationOptions) (*slog.Logger, error) {
+func initLogs(cfg *models.ApplicationOptions) error {
 	var handlers []slog.Handler
 
 	for _, logConf := range cfg.Log {
 		if h, err := makeHandler(logConf.Level, logConf.Destination, logConf.UseJSON, logConf.UseSource); err != nil {
-			return nil, err
+			return err
 		} else {
 			handlers = append(handlers, h)
 		}
 	}
 
-	return slog.New(slog.NewMultiHandler(handlers...)), nil
+	slog.SetDefault(slog.New(slog.NewMultiHandler(handlers...)))
+	return nil
 }
 
 // Function `makeHandler` creates the logging record handler corresponding to the given configuration object
@@ -181,7 +182,6 @@ func initErrorFormatter() *handlerutil.HandlerFailureFormatter {
 //   - opts: the API configuration options for the API server
 type tournabyteAPIService struct {
 	router         *gin.Engine
-	logger         *slog.Logger
 	errfmt         *handlerutil.HandlerFailureFormatter
 	db             *dbx.MongoConnection
 	s3             *dbx.MinioConnection
@@ -199,7 +199,7 @@ type tournabyteAPIService struct {
 //   - `*TournabyteAPIService`: pointer to the server instance
 //   - `error`: issue that occurred during server instantiation (nil if instantiation was successful)
 func NewTournabyteService(options *models.ApplicationOptions) (*tournabyteAPIService, error) {
-	logger, loggerErr := initLogs(options)
+	loggerErr := initLogs(options)
 	db, dbErr := mongoClientFromConfig(options)
 	s3, s3Err := minioClientFromConfig(options)
 	jwt, jwtErr := tokenSignerFromConfig(options)
@@ -225,7 +225,6 @@ func NewTournabyteService(options *models.ApplicationOptions) (*tournabyteAPISer
 
 	return &tournabyteAPIService{
 		router:         gin.New(),
-		logger:         logger,
 		errfmt:         initErrorFormatter(),
 		db:             db,
 		s3:             s3,

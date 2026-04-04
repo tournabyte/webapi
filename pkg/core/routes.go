@@ -14,6 +14,7 @@ package core
 import (
 	"net/http"
 
+	"github.com/gin-contrib/requestid"
 	"github.com/gin-gonic/gin"
 	"github.com/tournabyte/webapi/pkg/handlerutil"
 	"github.com/tournabyte/webapi/pkg/models"
@@ -21,8 +22,11 @@ import (
 
 func (srv *tournabyteAPIService) addGlobalMiddleware() {
 	srv.router.Use(gin.CustomRecovery(srv.recoverPanicAsFailure))
-	srv.router.Use(srv.assignRequestIdentifier)
-	srv.router.Use(srv.markRequestStartTimestamp)
+	srv.router.Use(gin.LoggerWithConfig(gin.LoggerConfig{
+		Formatter: srv.serviceLoggerFmt,
+		Output:    gin.DefaultWriter,
+	}))
+	srv.router.Use(requestid.New())
 }
 
 func (srv *tournabyteAPIService) registerRoutes() {
