@@ -13,11 +13,9 @@ package core
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log"
-	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -94,77 +92,48 @@ func tokenSignerFromConfig(cfg *models.ApplicationOptions) (jose.Signer, error) 
 //   - `*slog.Logger`: the service logger
 //   - `error`: issue with logging setup (if any)
 func initLogs(cfg *models.ApplicationOptions) error {
-	var handlers []slog.Handler
 
-	for _, logConf := range cfg.Log {
-		if h, err := makeHandler(logConf.Level, logConf.Destination, logConf.UseJSON, logConf.UseSource); err != nil {
-			return err
-		} else {
-			handlers = append(handlers, h)
-		}
+	if output, err := parseLogOutputs(cfg.Log.Outputs...); err != nil {
+		return err
+	} else {
+		log.SetFlags(cfg.Log.Flags)
+		log.SetPrefix(cfg.Log.Prefix)
+		log.SetOutput(io.MultiWriter(output...))
+		return nil
 	}
-
-	slog.SetDefault(slog.New(slog.NewMultiHandler(handlers...)))
-	return nil
 }
 
-// Function `makeHandler` creates the logging record handler corresponding to the given configuration object
+// Function `parseLogOutputs` creates the logging record destinations corresponding to the list of given outputs
 //
 // Parameters:
-//   - lvl: the logging level of the handler
-//   - dst: the locations the handler will write to
-//   - useJSON: flag to indicate whether JSON format should be used
-//   - useSource: flag to indicate whether source code locaiton sould be included in logging records
+//   - outputs...: the variadic list of log destinations
 //
 // Returns:
-//   - `slog.Handler`: the handler to process logging records
+//   - `[]io.Writer`: the list of writer objects to write log records to
 //   - `error`: the issue with producing the handler (nil if handler created successfully)
-func makeHandler(lvl string, dst []string, useJSON bool, useSource bool) (slog.Handler, error) {
-	var level slog.Level
-	var outputs []io.Writer
-	var handler slog.Handler
-	var opts slog.HandlerOptions
-
-	switch strings.ToLower(lvl) {
-	case "debug":
-		level = slog.LevelDebug
-	case "error":
-		level = slog.LevelError
-	case "warn":
-		level = slog.LevelWarn
-	case "info":
-		level = slog.LevelInfo
-	default:
-		return nil, errors.New("Invalid logging level provided")
-	}
-
-	for _, dst := range dst {
-		switch dst {
-		case "std.out":
-			outputs = append(outputs, os.Stdout)
-		case "std.err":
-			outputs = append(outputs, os.Stderr)
-		default:
-			if filepath.IsAbs(dst) {
-				if err := os.MkdirAll(filepath.Dir(dst), 0666); err != nil {
+func parseLogOutputs(outputs ...string) ([]io.Writer, error) {
+	var writers []io.Writer
+	for _, target := range outputs {
+		switch {
+		case target == "stdout":
+			writers = append(writers, os.Stdout)
+		case target == "stderr":
+			writers = append(writers, os.Stderr)
+		case strings.HasPrefix(target, "file:"):
+			path := strings.TrimPrefix(target, "file:")
+			if filepath.IsAbs(path) {
+				if err := os.MkdirAll(filepath.Dir(path), 0666); err != nil {
 					return nil, err
 				}
 			}
-			if f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666); err != nil {
+			if f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666); err != nil {
 				return nil, err
 			} else {
-				outputs = append(outputs, f)
+				writers = append(writers, f)
 			}
 		}
 	}
-
-	opts = slog.HandlerOptions{Level: level, AddSource: useSource}
-	if useJSON {
-		handler = slog.NewJSONHandler(io.MultiWriter(outputs...), &opts)
-	} else {
-		handler = slog.NewTextHandler(io.MultiWriter(outputs...), &opts)
-	}
-	return handler, nil
+	return writers, nil
 }
 
 func initErrorFormatter() *handlerutil.HandlerFailureFormatter {

@@ -13,7 +13,7 @@ package core
 
 import (
 	"fmt"
-	"log/slog"
+	"log"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -32,7 +32,7 @@ func (srv *tournabyteAPIService) recoverPanicAsFailure(ctx *gin.Context, e any) 
 
 	switch e := e.(type) {
 	case error:
-		slog.Error("[RECOVER]: panic from error", slog.String("error", e.Error()))
+		log.Printf("[RECOVER] panic from error: %s", e.Error())
 		handlerutil.RespondWithError(
 			ctx,
 			handlerutil.ErrInternalServerError(
@@ -40,7 +40,7 @@ func (srv *tournabyteAPIService) recoverPanicAsFailure(ctx *gin.Context, e any) 
 			),
 		)
 	default:
-		slog.Error("[RECOVER]: panic from value", slog.Any("value", e))
+		log.Printf("[RECOVER] panic caused by value: %v", e)
 		handlerutil.RespondWithError(
 			ctx,
 			handlerutil.ErrInternalServerError(
@@ -76,12 +76,12 @@ func (srv *tournabyteAPIService) serviceLoggerFmt(param gin.LogFormatterParams) 
 //   - ctx: the context that requires a mongo session
 func (srv *tournabyteAPIService) withMongoSession(ctx *gin.Context) {
 	if sessCtx, err := srv.db.SetUpSession(ctx.Request.Context()); err != nil {
-		slog.Error("[MIDDLEWARE]: mongo session not started", slog.String("error", err.Error()))
+		log.Printf("[MIDDLEWARE]: error starting mongo session: %s", err.Error())
 		handlerutil.RespondWithError(ctx, err)
 	} else {
 		defer srv.db.TearDownSession(sessCtx)
 		ctx.Request = ctx.Request.WithContext(sessCtx)
-		slog.Debug("[MIDDLEWARE]: mongo session injected into request context")
+		log.Printf("[MIDDLEWARE]: mongo session injected into request context (session ending deferred)")
 		ctx.Next()
 	}
 }
@@ -96,16 +96,16 @@ func (srv *tournabyteAPIService) withMongoSession(ctx *gin.Context) {
 //   - in a handlers chain, withMongoTransaction should be ordered after withMongoSession, i.e. [..., withMongoSession, withMongoTransaction, ...]
 func (srv *tournabyteAPIService) withMongoTransaction(ctx *gin.Context) {
 	if err := srv.db.BeginTransaction(ctx.Request.Context()); err != nil {
-		slog.Error("[MIDDLEWARE]: mongo transaction not started", slog.String("error", err.Error()))
+		log.Printf("[MIDDLEWARE]: error starting mongo transaction: %s", err.Error())
 		handlerutil.RespondWithError(ctx, err)
 	} else {
 		ctx.Next()
 
 		if len(ctx.Errors) > 0 {
-			slog.Debug("[MIDDLEWARE]: mongo transaction rolled back", slog.String("errors", ctx.Errors.String()))
+			log.Printf("[MIDDLEWARE]: error in request context, rolling back transaction")
 			srv.db.AbortTransaction(ctx.Request.Context())
 		} else {
-			slog.Debug("[MIDDLEWARE]: mongo transaction committed")
+			log.Printf("[MIDDLEWARE]: commiting transaction")
 			srv.db.CommitTransaction(ctx.Request.Context())
 		}
 	}
