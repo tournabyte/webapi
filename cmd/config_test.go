@@ -54,16 +54,13 @@ const configContentTemplate = `{
     "accessKey": "{{.minioIDFile}}",
     "secretKey": "{{.minioKeyFile}}"
   },
-  "log": [
-    {
-      "level": "debug",
-      "destination": [
-        "std.out"
-      ],
-      "source": false,
-      "json": false
-    }
-	]
+  "log": {
+		"destinations": [
+			"stdout"
+		],
+		"prefix": "test log prefix",
+		"flags": 51
+	}
 }
 `
 
