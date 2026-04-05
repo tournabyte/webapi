@@ -59,7 +59,7 @@ func (srv *tournabyteAPIService) recoverPanicAsFailure(ctx *gin.Context, e any) 
 //   - `string`: a format specified string indicating what gin server logs should look like
 func (srv *tournabyteAPIService) serviceLoggerFmt(param gin.LogFormatterParams) string {
 	return fmt.Sprintf(
-		"[GIN] %s <%s | %s %s | %s> -  <%d | took: %s>",
+		"[GIN] %s <%s | %s %s | %s> -  <%d | took: %s>\n",
 		param.TimeStamp.Format(time.RFC1123Z),
 		param.ClientIP,
 		param.Method,
