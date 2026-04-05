@@ -12,6 +12,7 @@ package core
  */
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-contrib/requestid"
@@ -24,7 +25,7 @@ func (srv *tournabyteAPIService) addGlobalMiddleware() {
 	srv.router.Use(gin.CustomRecovery(srv.recoverPanicAsFailure))
 	srv.router.Use(gin.LoggerWithConfig(gin.LoggerConfig{
 		Formatter: srv.serviceLoggerFmt,
-		Output:    gin.DefaultWriter,
+		Output:    log.Writer(),
 	}))
 	srv.router.Use(requestid.New())
 }
