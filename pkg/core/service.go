@@ -137,7 +137,8 @@ func parseLogOutputs(outputs ...string) ([]io.Writer, error) {
 }
 
 func initErrorFormatter() *handlerutil.HandlerFailureFormatter {
-	return &handlerutil.HandlerFailureFormatter{}
+	ffmt := handlerutil.FailureFormatter()
+	return &ffmt
 }
 
 // Type `tournabyteAPIService` represents the API server for the tournabyte platform

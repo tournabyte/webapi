@@ -68,6 +68,7 @@ func RespondWithError(ctx *gin.Context, err error) {
 			},
 		}
 		ctx.AbortWithStatusJSON(failure.statusCode, body)
+		ctx.Error(err)
 	} else {
 		panic(err)
 	}
