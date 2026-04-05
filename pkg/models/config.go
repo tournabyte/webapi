@@ -22,7 +22,7 @@ import "time"
 //   - ObjectStore: the object store options component of the config. See the `objectStorageOptions` struct for more details
 type ApplicationOptions struct {
 	Serve       serviceOptions       `mapstructure:"serve"`
-	Log         []loggingOptions     `mapstructure:"log"`
+	Log         loggingOptions       `mapstructure:"log"`
 	RecordStore recordStorageOptions `mapstructure:"mongodb"`
 	ObjectStore objectStorageOptions `mapstructure:"minio"`
 }
@@ -101,8 +101,7 @@ type objectStorageOptions struct {
 //   - UseJSON: boolean indicating to emit records as JSON or plaintext
 //   - UseSource: boolean indicating to include source code location in emitted records
 type loggingOptions struct {
-	Level       string   `mapstructure:"level"`
-	Destination []string `mapstructure:"destination"`
-	UseJSON     bool     `mapstructure:"json"`
-	UseSource   bool     `mapstructure:"source"`
+	Outputs []string `mapstructure:"destinations"`
+	Prefix  string   `mapstructure:"prefix"`
+	Flags   int      `mapstructure:"flags"`
 }

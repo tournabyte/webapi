@@ -12,11 +12,11 @@ package core
  */
 
 import (
-	"log/slog"
+	"fmt"
+	"log"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/tournabyte/webapi/pkg/handlerutil"
 )
 
@@ -32,7 +32,7 @@ func (srv *tournabyteAPIService) recoverPanicAsFailure(ctx *gin.Context, e any) 
 
 	switch e := e.(type) {
 	case error:
-		srv.logger.Error("Recovering from panic from error", slog.String("err", e.Error()))
+		log.Printf("[RECOVER] panic from error: %s", e.Error())
 		handlerutil.RespondWithError(
 			ctx,
 			handlerutil.ErrInternalServerError(
@@ -40,7 +40,7 @@ func (srv *tournabyteAPIService) recoverPanicAsFailure(ctx *gin.Context, e any) 
 			),
 		)
 	default:
-		srv.logger.Error("Recovering from panic from non-error", slog.Any("panic_value", e))
+		log.Printf("[RECOVER] panic caused by value: %v", e)
 		handlerutil.RespondWithError(
 			ctx,
 			handlerutil.ErrInternalServerError(
@@ -50,28 +50,24 @@ func (srv *tournabyteAPIService) recoverPanicAsFailure(ctx *gin.Context, e any) 
 	}
 }
 
-// Function `(*tournabyteAPIService).assignRequestIdentifier` creates unique IDs for an incoming request
+// Function `(*tournabyteAPIService).serviceLoggerFmt` is a gin.LogFormatter that defines a custom log format for server level logs
 //
 // Parameters:
-//   - ctx: the request context to assign a unique request ID to
-func (srv *tournabyteAPIService) assignRequestIdentifier(ctx *gin.Context) {
-	requestID := uuid.New().String()
-	ctx.Set("RequestID", requestID)
-	ctx.Writer.Header().Set("X-Request-ID", requestID)
-	srv.logger.Debug("Assigning identifier to request", slog.String("RequestID", requestID))
-	ctx.Next()
-}
-
-// Function `(*tournabyteAPIService).markRequestStartTimestamp` marks the timestamp request processing begins
+//   - param: the gin specific logging parameters
 //
-// Parameters:
-//   - ctx: the request context to begin timing
-func (srv *tournabyteAPIService) markRequestStartTimestamp(ctx *gin.Context) {
-	startTime := time.Now().UTC()
-	ctx.Writer.Header().Set("X-Request-Received-At", startTime.String())
-	ctx.Set("RequestTime", startTime)
-	srv.logger.Debug("Marked the timestamp request began processing", slog.Time("t", startTime))
-	ctx.Next()
+// Returns:
+//   - `string`: a format specified string indicating what gin server logs should look like
+func (srv *tournabyteAPIService) serviceLoggerFmt(param gin.LogFormatterParams) string {
+	return fmt.Sprintf(
+		"[GIN] %s <%s | %s %s | %s> -  <%d | took: %s>",
+		param.TimeStamp.Format(time.RFC1123Z),
+		param.ClientIP,
+		param.Method,
+		param.Path,
+		param.Request.Proto,
+		param.StatusCode,
+		param.Latency.String(),
+	)
 }
 
 // Function `(*tournabyteAPIService).withMongoSession` sets up a mongo session within the given request context
@@ -80,11 +76,13 @@ func (srv *tournabyteAPIService) markRequestStartTimestamp(ctx *gin.Context) {
 //   - ctx: the context that requires a mongo session
 func (srv *tournabyteAPIService) withMongoSession(ctx *gin.Context) {
 	if sessCtx, err := srv.db.SetUpSession(ctx.Request.Context()); err != nil {
-		srv.logger.Error("Failed to start session", slog.String("error", err.Error()))
+		log.Printf("[MIDDLEWARE]: error starting mongo session: %s", err.Error())
 		handlerutil.RespondWithError(ctx, err)
 	} else {
+		defer log.Printf("[MIDDLEWARE]: mongo session closed")
 		defer srv.db.TearDownSession(sessCtx)
 		ctx.Request = ctx.Request.WithContext(sessCtx)
+		log.Printf("[MIDDLEWARE]: mongo session injected into request context (session ending deferred)")
 		ctx.Next()
 	}
 }
@@ -99,16 +97,16 @@ func (srv *tournabyteAPIService) withMongoSession(ctx *gin.Context) {
 //   - in a handlers chain, withMongoTransaction should be ordered after withMongoSession, i.e. [..., withMongoSession, withMongoTransaction, ...]
 func (srv *tournabyteAPIService) withMongoTransaction(ctx *gin.Context) {
 	if err := srv.db.BeginTransaction(ctx.Request.Context()); err != nil {
-		srv.logger.Error("Transaction failed to start", slog.String("error", err.Error()))
+		log.Printf("[MIDDLEWARE]: error starting mongo transaction: %s", err.Error())
 		handlerutil.RespondWithError(ctx, err)
 	} else {
 		ctx.Next()
 
 		if len(ctx.Errors) > 0 {
-			srv.logger.Debug("Transaction aborted")
+			log.Printf("[MIDDLEWARE]: error in request context, rolling back transaction")
 			srv.db.AbortTransaction(ctx.Request.Context())
 		} else {
-			srv.logger.Debug("Transaction committed")
+			log.Printf("[MIDDLEWARE]: commiting transaction")
 			srv.db.CommitTransaction(ctx.Request.Context())
 		}
 	}
