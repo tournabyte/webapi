@@ -79,6 +79,7 @@ func (srv *tournabyteAPIService) withMongoSession(ctx *gin.Context) {
 		log.Printf("[MIDDLEWARE]: error starting mongo session: %s", err.Error())
 		handlerutil.RespondWithError(ctx, err)
 	} else {
+		defer log.Printf("[MIDDLEWARE]: mongo session closed")
 		defer srv.db.TearDownSession(sessCtx)
 		ctx.Request = ctx.Request.WithContext(sessCtx)
 		log.Printf("[MIDDLEWARE]: mongo session injected into request context (session ending deferred)")
