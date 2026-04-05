@@ -137,7 +137,9 @@ func parseLogOutputs(outputs ...string) ([]io.Writer, error) {
 }
 
 func initErrorFormatter() *handlerutil.HandlerFailureFormatter {
-	ffmt := handlerutil.FailureFormatter()
+	ffmt := handlerutil.FailureFormatter(
+		dbx.IsDuplicateKeyError,
+	)
 	return &ffmt
 }
 

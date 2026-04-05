@@ -15,20 +15,22 @@ import "net/http"
 
 // Constant error messages to display when handler functions encouter a failure
 const (
-	failedToBindRequest       = "I don't understand what you are trying to tell me."
-	failedToProcessRequest    = "I don't know what to do with what you've given me."
-	failedToAuthorizeRequest  = "You don't appear to have permission to access that."
-	failedToReachUpstreamData = "I've having trouble reaching an operating partner."
-	failedToRunWithoutIssue   = "I'm so dumb, I should just exec `$ rm -rf /`..."
+	failedToBindRequest        = "I don't understand what you are trying to tell me."
+	failedToProcessRequest     = "I don't know what to do with what you've given me."
+	failedToAuthorizeRequest   = "You don't appear to have permission to access that."
+	failedToReachUpstreamData  = "I've having trouble reaching an operating partner."
+	failedToSatisfyConstraints = "I can't fulfill this request or else bad things will happen."
+	failedToRunWithoutIssue    = "I'm so dumb, I should just exec `$ rm -rf /` myself"
 )
 
 var (
-	ErrBadRequest          = handlerFailureFactory(http.StatusBadRequest, failedToBindRequest)
-	ErrUnprocessibleEntity = handlerFailureFactory(http.StatusUnprocessableEntity, failedToProcessRequest)
-	ErrNotAuthorized       = handlerFailureFactory(http.StatusUnauthorized, failedToAuthorizeRequest)
-	ErrNoAccess            = handlerFailureFactory(http.StatusForbidden, failedToAuthorizeRequest)
-	ErrUpstreamUnreachable = handlerFailureFactory(http.StatusBadGateway, failedToReachUpstreamData)
-	ErrInternalServerError = handlerFailureFactory(http.StatusInternalServerError, failedToRunWithoutIssue)
+	ErrBadRequest              = handlerFailureFactory(http.StatusBadRequest, failedToBindRequest)
+	ErrUnprocessibleEntity     = handlerFailureFactory(http.StatusUnprocessableEntity, failedToProcessRequest)
+	ErrNotAuthorized           = handlerFailureFactory(http.StatusUnauthorized, failedToAuthorizeRequest)
+	ErrNoAccess                = handlerFailureFactory(http.StatusForbidden, failedToAuthorizeRequest)
+	ErrUpstreamUnreachable     = handlerFailureFactory(http.StatusBadGateway, failedToReachUpstreamData)
+	ErrInternalServerError     = handlerFailureFactory(http.StatusInternalServerError, failedToRunWithoutIssue)
+	ErrConstraintsNotSatisfied = handlerFailureFactory(http.StatusConflict, failedToSatisfyConstraints)
 )
 
 // Type `HandlerFailureFormatter` utilizes predicate-based matching rules to format errors as `handlerFailure` instances
