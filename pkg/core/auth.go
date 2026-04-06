@@ -93,6 +93,32 @@ func userCreationPipeline(ctx context.Context) (context.Context, context.CancelC
 	return pipelineCtx, pipelineCancel, pipelineInput, out9
 }
 
+// Function `userAuthenticationPipeline` initializes a handling pipeline for user authentication
+//
+// Parameters:
+//   - ctx: the parent context to control the created pipeline
+//
+// Returns:
+//   - `context.Context`: the context controlling the created pipeline (derived from the given context.Context)
+//   - `context.CancelCauseFunc`: the cancellation function controlling pipeline cancellation
+//   - `chan<- *handlerutil.HandlerWorkspace`: the input channel for the pipeline (send-only)
+//   - `<-chan *handlerutil.HandlerWorkspace`: the output channel for the pipeline (read-only)
+func userAuthenticationPipeline(ctx context.Context) (context.Context, context.CancelCauseFunc, chan<- *handlerutil.HandlerWorkspace, <-chan *handlerutil.HandlerWorkspace) {
+	pipelineCtx, pipelineCancel := context.WithCancelCause(ctx)
+	pipelineInput := make(chan *handlerutil.HandlerWorkspace)
+
+	out1 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindAuthenticationRequestFormat, pipelineInput)
+	out2 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchAccountRecordFromDatabase, out1)
+	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, validateCredentials, out2)
+	out4 := handlerutil.Stage(pipelineCtx, pipelineCancel, createAccessToken, out3)
+	out5 := handlerutil.Stage(pipelineCtx, pipelineCancel, createRefreshToken, out4)
+	out6 := handlerutil.Stage(pipelineCtx, pipelineCancel, deriveSessionRecord, out5)
+	out7 := handlerutil.Stage(pipelineCtx, pipelineCancel, createSessionRecord, out6)
+	out8 := handlerutil.Stage(pipelineCtx, pipelineCancel, populateUserAuthorizationResponse, out7)
+
+	return pipelineCtx, pipelineCancel, pipelineInput, out8
+}
+
 // Function `bindAuthenticationRequestFormat` binds the request body and saves it to the handler workspace for later processing
 //
 // Parameters:
@@ -422,5 +448,55 @@ func populateUserAuthorizationResponse(ctx context.Context, space *handlerutil.H
 
 	log.Printf("[HANDLER]: saved response structure to workspace")
 	space.Set(userAuthorizationResponseKey, authorizationDetails)
+	return nil
+}
+
+// Function `fetchAccountRecordFromDatabase` retrieves an account record based on the an authentication request email field
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
+func fetchAccountRecordFromDatabase(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var attempt models.AuthenticationRequest
+	var acct models.UserAccount
+	var sess *mongo.Session
+	var cfg *options.FindOneOptionsBuilder
+	var err error
+
+	log.Printf("[HANDLER]: loading authentication request information from workspace under key %q", authRequestKey)
+	if err := space.Get(authRequestKey, &attempt); err != nil {
+		log.Printf("[HANDLER]: error loading authentication request information (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading database operation settings...")
+	if cfg, err = dbx.NewOptions[options.FindOneOptionsBuilder](); err != nil {
+		log.Printf("[HANDLER]: error configuration database operation (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading database session from request context...")
+	if sess, err = dbx.MongoFromContext(ctx); err != nil {
+		log.Printf("[HANDLER]: error loading database session from request context (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: performing database insertion operation")
+	filter := bson.D{{Key: "login_email", Value: attempt.Email}}
+	err = sess.Client().
+		Database(models.UserAccountQueryContext.Database).
+		Collection(models.UserAccountQueryContext.Collection).
+		FindOne(ctx, filter, cfg).
+		Decode(&acct)
+
+	if err != nil {
+		log.Printf("[HANDLER]: error performing database lookup (%s)", err.Error())
+		return err
+	}
+
+	space.Set(userAccountRecordKey, acct)
 	return nil
 }

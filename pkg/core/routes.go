@@ -59,6 +59,19 @@ func (srv *tournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
 	)
 
 	// POST /v1/users/tokens
+	authGroup.POST(
+		"/tokens",
+		srv.withMongoSession,
+		srv.withMongoTransaction,
+		handlerutil.HandlerTemplate(
+			srv.initUserCreationWorkspace,
+			userAuthenticationPipeline,
+			handlerutil.AwaitAndRespondAs[models.AuthenticatedUser],
+			http.StatusOK,
+			userAuthorizationResponseKey,
+			srv.errfmt,
+		),
+	)
 
 	// DELETE /v1/users/tokens/{id}
 
