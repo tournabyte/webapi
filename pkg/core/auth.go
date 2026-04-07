@@ -12,9 +12,12 @@ package core
  */
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"log"
 	"time"
 
@@ -348,10 +351,7 @@ func deriveSessionRecord(ctx context.Context, space *handlerutil.HandlerWorkspac
 		return err
 	}
 	log.Printf("[HANDLER]: creating hash of refresh token...")
-	if hash, err = argon2id.CreateHash(token, argon2id.DefaultParams); err != nil {
-		log.Printf("[HANDLER]: error creating refresh token hase (%s)", err.Error())
-		return err
-	}
+	hash = fmt.Sprintf("%x", sha256.Sum256(bytes.NewBufferString(token).Bytes()))
 
 	log.Printf("[HANDLER]: initializing user session record...")
 	sess.ID = hash
