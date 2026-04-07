@@ -43,6 +43,7 @@ const (
 	userSessionRecordKey         = "userSessionRecord"
 	accessTokenKey               = "userAccessToken"
 	refreshTokenKey              = "userRefreshToken"
+	activeUserID                 = "activeUserID"
 )
 
 // Errors specific to authentication/authorization workflow tasks
@@ -115,7 +116,7 @@ func userAuthenticationPipeline(ctx context.Context) (context.Context, context.C
 	pipelineInput := make(chan *handlerutil.HandlerWorkspace)
 
 	out1 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindAuthenticationRequestFormat, pipelineInput)
-	out2 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchAccountRecordFromDatabase, out1)
+	out2 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchAccountRecordFromDatabaseByEmail, out1)
 	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, validateCredentials, out2)
 	out4 := handlerutil.Stage(pipelineCtx, pipelineCancel, createAccessToken, out3)
 	out5 := handlerutil.Stage(pipelineCtx, pipelineCancel, createRefreshToken, out4)
@@ -141,9 +142,9 @@ func sessionRefreshPipeline(ctx context.Context) (context.Context, context.Cance
 	pipelineInput := make(chan *handlerutil.HandlerWorkspace)
 
 	out1 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindSessionRefreshRequestFormat, pipelineInput)
-	out2 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchSessionRecordFromDatabase, out1)
+	out2 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchSessionRecordFromDatabaseByID, out1)
 	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, validateRefreshToken, out2)
-	out4 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchAccountRecordFromDatabase, out3)
+	out4 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchAccountRecordFromDatabaseByID, out3)
 	out5 := handlerutil.Stage(pipelineCtx, pipelineCancel, createAccessToken, out4)
 	out6 := handlerutil.Stage(pipelineCtx, pipelineCancel, createRefreshToken, out5)
 	out7 := handlerutil.Stage(pipelineCtx, pipelineCancel, deriveSessionRecord, out6)
@@ -512,7 +513,7 @@ func populateUserAuthorizationResponse(ctx context.Context, space *handlerutil.H
 	return nil
 }
 
-// Function `fetchAccountRecordFromDatabase` retrieves an account record based on the an authentication request email field
+// Function `fetchAccountRecordFromDatabaseByEmail` retrieves an account record based on the an authentication request email field
 //
 // Parameters:
 //   - ctx: the context managing the lifecycle of this handler
@@ -520,7 +521,7 @@ func populateUserAuthorizationResponse(ctx context.Context, space *handlerutil.H
 //
 // Returns:
 //   - `error`: error that occurred during this processing step
-func fetchAccountRecordFromDatabase(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+func fetchAccountRecordFromDatabaseByEmail(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
 	var attempt models.AuthenticationRequest
 	var acct models.UserAccount
 	var sess *mongo.Session
@@ -562,7 +563,7 @@ func fetchAccountRecordFromDatabase(ctx context.Context, space *handlerutil.Hand
 	return nil
 }
 
-// Function `fetchSessionRecordFromDatabase` retrieves a session record based on the sha256 hash of the provided raw refresh token
+// Function `fetchAccountRecordFromDatabaseByID` retrieves an account record based on the an authentication request email field
 //
 // Parameters:
 //   - ctx: the context managing the lifecycle of this handler
@@ -570,7 +571,58 @@ func fetchAccountRecordFromDatabase(ctx context.Context, space *handlerutil.Hand
 //
 // Returns:
 //   - `error`: error that occurred during this processing step
-func fetchSessionRecordFromDatabase(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+func fetchAccountRecordFromDatabaseByID(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var userid bson.ObjectID
+	var acct models.UserAccount
+	var sess *mongo.Session
+	var cfg *options.FindOneOptionsBuilder
+	var err error
+
+	log.Printf("[HANDLER]: loading active user ID from workspace...")
+	if err = space.Get(activeUserID, &userid); err != nil {
+		log.Printf("[HANDLER]: error loading active user ID (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading database operation settings...")
+	if cfg, err = dbx.NewOptions[options.FindOneOptionsBuilder](); err != nil {
+		log.Printf("[HANDLER]: error configuration database operation (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading database session from request context...")
+	if sess, err = dbx.MongoFromContext(ctx); err != nil {
+		log.Printf("[HANDLER]: error loading database session from request context (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: performing database lookup operation")
+	filter := bson.D{{Key: "_id", Value: userid}}
+	err = sess.Client().
+		Database(models.UserAccountQueryContext.Database).
+		Collection(models.UserAccountQueryContext.Collection).
+		FindOne(ctx, filter, cfg).
+		Decode(&acct)
+
+	if err != nil {
+		log.Printf("[HANDLER]: error performing database lookup (%s)", err.Error())
+		return err
+	}
+
+	space.Set(userAccountRecordKey, acct)
+	return nil
+
+}
+
+// Function `fetchSessionRecordFromDatabaseByID` retrieves a session record based on the sha256 hash of the provided raw refresh token
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
+func fetchSessionRecordFromDatabaseByID(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
 	var req models.SessionRefreshRequest
 	var cur models.UserSession
 	var sess *mongo.Session
@@ -608,7 +660,9 @@ func fetchSessionRecordFromDatabase(ctx context.Context, space *handlerutil.Hand
 		return err
 	}
 
+	log.Printf("[HANDLER]: saved session record under %q and session owner under %q", userSessionRecordKey, activeUserID)
 	space.Set(userSessionRecordKey, cur)
+	space.Set(activeUserID, cur.Authorizes)
 	return nil
 }
 
