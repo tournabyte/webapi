@@ -49,7 +49,7 @@ func (srv *tournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
 		srv.withMongoSession,
 		srv.withMongoTransaction,
 		handlerutil.HandlerTemplate(
-			srv.initUserCreationWorkspace,
+			srv.initAuthWorkspace,
 			userCreationPipeline,
 			handlerutil.AwaitAndRespondAs[models.AuthenticatedUser],
 			http.StatusCreated,
@@ -64,8 +64,23 @@ func (srv *tournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
 		srv.withMongoSession,
 		srv.withMongoTransaction,
 		handlerutil.HandlerTemplate(
-			srv.initUserCreationWorkspace,
+			srv.initAuthWorkspace,
 			userAuthenticationPipeline,
+			handlerutil.AwaitAndRespondAs[models.AuthenticatedUser],
+			http.StatusOK,
+			userAuthorizationResponseKey,
+			srv.errfmt,
+		),
+	)
+
+	// PUT /v1/users/tokens
+	authGroup.PUT(
+		"/tokens",
+		srv.withMongoSession,
+		srv.withMongoTransaction,
+		handlerutil.HandlerTemplate(
+			srv.initAuthWorkspace,
+			sessionRefreshPipeline,
 			handlerutil.AwaitAndRespondAs[models.AuthenticatedUser],
 			http.StatusOK,
 			userAuthorizationResponseKey,

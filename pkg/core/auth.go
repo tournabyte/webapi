@@ -35,6 +35,7 @@ import (
 // Workspace keys associated with authentication/authorization workspace tasks
 const (
 	authRequestKey               = "authenticationRequest"
+	authRefreshKey               = "sessionRefreshRequest"
 	userAuthorizationResponseKey = "authorizedUserData"
 	authTokenOptionsKey          = "authorizationTokenOptions"
 	authSessionOptionsKey        = "authorizationSessionOptions"
@@ -46,7 +47,10 @@ const (
 
 // Errors specific to authentication/authorization workflow tasks
 var (
-	ErrInvalidLogin = errors.New("invalid credentials presented")
+	ErrInvalidLogin            = errors.New("invalid credentials presented")
+	ErrRefreshTokenAlreadyUsed = errors.New("this token has already been used")
+	ErrRefreshTokenExpired     = errors.New("this token is expired")
+	ErrRefreshTokenNotYetValid = errors.New("too early to use this token")
 )
 
 // Function `(*tournabyteAPIService).initUserCreationWorkspace` initializes the handler workspace for a user creation request handling sequence
@@ -56,7 +60,7 @@ var (
 //
 // Returns:
 //   - `*handlerutil.HandlerWorkspace`: the workspace for creating a user
-func (srv *tournabyteAPIService) initUserCreationWorkspace(ctx *gin.Context) *handlerutil.HandlerWorkspace {
+func (srv *tournabyteAPIService) initAuthWorkspace(ctx *gin.Context) *handlerutil.HandlerWorkspace {
 	space := handlerutil.DefaultWorkspace()
 
 	bind := handlerutil.BindingsFromRequestContext(ctx, handlerutil.ShouldHaveJSONBody)
@@ -122,6 +126,34 @@ func userAuthenticationPipeline(ctx context.Context) (context.Context, context.C
 	return pipelineCtx, pipelineCancel, pipelineInput, out8
 }
 
+// Function `sessionRefreshPipeline` initializes a handling pipeline for validating a refresh token and regenerating the access/refresh token pair
+//
+// Parameters:
+//   - ctx: the parent context to control the created pipeline
+//
+// Returns:
+//   - `context.Context`: the context controlling the created pipeline (derived from the given context.Context)
+//   - `context.CancelCauseFunc`: the cancellation function controlling pipeline cancellation
+//   - `chan<- *handlerutil.HandlerWorkspace`: the input channel for the pipeline (send-only)
+//   - `<-chan *handlerutil.HandlerWorkspace`: the output channel for the pipeline (read-only)
+func sessionRefreshPipeline(ctx context.Context) (context.Context, context.CancelCauseFunc, chan<- *handlerutil.HandlerWorkspace, <-chan *handlerutil.HandlerWorkspace) {
+	pipelineCtx, pipelineCancel := context.WithCancelCause(ctx)
+	pipelineInput := make(chan *handlerutil.HandlerWorkspace)
+
+	out1 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindSessionRefreshRequestFormat, pipelineInput)
+	out2 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchSessionRecordFromDatabase, out1)
+	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, validateRefreshToken, out2)
+	out4 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchAccountRecordFromDatabase, out3)
+	out5 := handlerutil.Stage(pipelineCtx, pipelineCancel, createAccessToken, out4)
+	out6 := handlerutil.Stage(pipelineCtx, pipelineCancel, createRefreshToken, out5)
+	out7 := handlerutil.Stage(pipelineCtx, pipelineCancel, deriveSessionRecord, out6)
+	out8 := handlerutil.Stage(pipelineCtx, pipelineCancel, deleteSessionRecord, out7)
+	out9 := handlerutil.Stage(pipelineCtx, pipelineCancel, createSessionRecord, out8)
+	out10 := handlerutil.Stage(pipelineCtx, pipelineCancel, populateUserAuthorizationResponse, out9)
+
+	return pipelineCtx, pipelineCancel, pipelineInput, out10
+}
+
 // Function `bindAuthenticationRequestFormat` binds the request body and saves it to the handler workspace for later processing
 //
 // Parameters:
@@ -148,6 +180,35 @@ func bindAuthenticationRequestFormat(ctx context.Context, space *handlerutil.Han
 
 	space.Set(authRequestKey, body)
 	log.Printf("[HANDLER]: saved request body as variable of type %T within workspace under key %q", body, authRequestKey)
+	return nil
+}
+
+// Function `bindSessionRefreshRequestFormat` binds the request body and saves it to the handler workspace for later processing
+//
+// Parameters:
+//   - ctx: the context managing the handler lifecycle
+//   - space: the handler workspace for the session refresh process
+//
+// Returns:
+//   - `error`: error that occurred during this step of the pipeline
+func bindSessionRefreshRequestFormat(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var body models.SessionRefreshRequest
+	var bindings handlerutil.Bindings
+
+	log.Printf("[HANDLER]: loading request bindings from workspace...")
+	if err := space.Get(handlerutil.RequestBindings, &bindings); err != nil {
+		log.Printf("[HANDLER]: error loading request bindings from workspace (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: binding request body to variable of type %T", body)
+	if err := bindings.BindBodyAsJSON(&body); err != nil {
+		log.Printf("[HANDLER]: error binding request body (%s)", err.Error())
+		return err
+	}
+
+	space.Set(authRefreshKey, body)
+	log.Printf("[HANDLER]: saved request body as variable of type %T within workspace under key %q", body, authRefreshKey)
 	return nil
 }
 
@@ -484,7 +545,7 @@ func fetchAccountRecordFromDatabase(ctx context.Context, space *handlerutil.Hand
 		return err
 	}
 
-	log.Printf("[HANDLER]: performing database insertion operation")
+	log.Printf("[HANDLER]: performing database lookup operation")
 	filter := bson.D{{Key: "login_email", Value: attempt.Email}}
 	err = sess.Client().
 		Database(models.UserAccountQueryContext.Database).
@@ -498,5 +559,137 @@ func fetchAccountRecordFromDatabase(ctx context.Context, space *handlerutil.Hand
 	}
 
 	space.Set(userAccountRecordKey, acct)
+	return nil
+}
+
+// Function `fetchSessionRecordFromDatabase` retrieves a session record based on the sha256 hash of the provided raw refresh token
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
+func fetchSessionRecordFromDatabase(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var req models.SessionRefreshRequest
+	var cur models.UserSession
+	var sess *mongo.Session
+	var cfg *options.FindOneOptionsBuilder
+	var err error
+
+	log.Printf("[HANDLER]: loading authentication refresh information from workspace under key %q", authRefreshKey)
+	if err := space.Get(authRefreshKey, &req); err != nil {
+		log.Printf("[HANDLER]: error loading authentication refresh information (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading database operation settings...")
+	if cfg, err = dbx.NewOptions[options.FindOneOptionsBuilder](); err != nil {
+		log.Printf("[HANDLER]: error configuration database operation (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading database session from request context...")
+	if sess, err = dbx.MongoFromContext(ctx); err != nil {
+		log.Printf("[HANDLER]: error loading database session from request context (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: performing database lookup operation")
+	filter := bson.D{{Key: "_id", Value: fmt.Sprintf("%x", sha256.Sum256(bytes.NewBufferString(req.RefreshToken).Bytes()))}}
+	err = sess.Client().
+		Database(models.UserSessionQueryContext.Database).
+		Collection(models.UserSessionQueryContext.Collection).
+		FindOne(ctx, filter, cfg).
+		Decode(&cur)
+
+	if err != nil {
+		log.Printf("[HANDLER]: error performing database lookup (%s)", err.Error())
+		return err
+	}
+
+	space.Set(userSessionRecordKey, cur)
+	return nil
+}
+
+// Function `validateRefreshToken` determines the validaty of the refresh token according to token storage record
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
+func validateRefreshToken(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var sess models.UserSession
+	var checkTime = time.Now().UTC()
+	var err error
+
+	log.Printf("[HANDLER]: loading session details from workspace...")
+	if err = space.Get(userSessionRecordKey, &sess); err != nil {
+		log.Printf("[HANDLER]: error loading session details (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: checking if refresh token has already been used...")
+	if sess.Rotated {
+		log.Printf("[HANDLER]: refresh token has already been used")
+		return ErrRefreshTokenAlreadyUsed
+	}
+
+	log.Printf("[HANDLER] checking if the refresh token validity window has started...")
+	if sess.NotValidBefore.After(checkTime) {
+		log.Printf("[HANDLER]: refresh token validity window has not yet started")
+		return ErrRefreshTokenNotYetValid
+	}
+
+	log.Printf("[HANDLER]: checking if the refresh token validity window has ended...")
+	if sess.NotValidAfter.Before(checkTime) {
+		log.Printf("[HANDLER]: refresh token validity window has already closed")
+		return ErrRefreshTokenExpired
+	}
+
+	log.Printf("[HANDLER]: token successfully validated")
+	return nil
+}
+
+// Function `deleteSessionRecord` removes the specified session record from the `tournabyte.sessions` collections to avoid reuse of tokens
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
+func deleteSessionRecord(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var cur models.UserSession
+	var sess *mongo.Session
+	var err error
+
+	log.Printf("[HANDLER]: loading session details from workspace...")
+	if err = space.Get(userSessionRecordKey, &cur); err != nil {
+		log.Printf("[HANDLER]: error loading session details (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading database session from request context...")
+	if sess, err = dbx.MongoFromContext(ctx); err != nil {
+		log.Printf("[HANDLER]: error loading database session from request context (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: performing database removal operation")
+	filter := bson.D{{Key: "_id", Value: cur.ID}}
+	_, err = sess.Client().
+		Database(models.UserSessionQueryContext.Database).
+		Collection(models.UserSessionQueryContext.Collection).
+		DeleteOne(ctx, filter)
+
+	if err != nil {
+		log.Printf("[HANDLER]: error performing database deletion (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: session record successfully removed")
 	return nil
 }

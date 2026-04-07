@@ -63,6 +63,14 @@ type AuthenticationRequest struct {
 	Password string `json:"password" binding:"required,min=8"`
 }
 
+// Type `SessionRefreshRequest` represents the details required to exchange a refresh token for a new access/refresh token pair
+//
+// Fields:
+//   - RefreshToken: the current refresh token to exchange
+type SessionRefreshRequest struct {
+	RefreshToken string `json:"refresh" binding:"required,"`
+}
+
 // Type `UserAccount` represesnts a user within the Tournabyte platform (this is not the same as a player or team)
 //
 // Fields:
