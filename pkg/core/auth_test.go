@@ -30,6 +30,26 @@ import (
 var (
 	pingResponse = bson.D{{Key: "ok", Value: 1}}
 	insertOk     = bson.D{{Key: "ok", Value: 1}, {Key: "n", Value: 1}}
+	findUserDoc  = bson.A{
+		bson.M{
+			"_id":           bson.NewObjectID(),
+			"login_email":   "testuser@example.io",
+			"password_hash": "$argon2id$v=19$m=16,t=2,p=1$YWJjZGVmZ2g$njexcOQ6BRt+mtozS/6LDg",
+			"metadata": bson.M{
+				"active":     true,
+				"created_at": time.Now().UTC(),
+				"updated_at": time.Now().UTC().Add(time.Hour),
+			},
+		},
+	}
+	findUserOk = bson.D{
+		{Key: "ok", Value: 1},
+		{Key: "cursor", Value: bson.D{
+			{Key: "id", Value: int64(0)},
+			{Key: "ns", Value: "tournabyte.users"},
+			{Key: "firstBatch", Value: findUserDoc},
+		}},
+	}
 )
 
 func setupWorkingUserCreationContext(t *testing.T) context.Context {
@@ -91,9 +111,53 @@ func setupWorkingUserCreationWorkspace(t *testing.T) *handlerutil.HandlerWorkspa
 	return &space
 }
 
+func setupWorkingUserAuthenticationContext(t *testing.T) context.Context {
+	t.Helper()
+
+	m := drivertest.NewMockDeployment(
+		pingResponse,
+		findUserOk,
+		insertOk,
+	)
+	mockDb, err := dbx.NewMongoConnection(
+		dbx.ConnectionDeployment(m),
+	)
+	require.NoError(t, err)
+
+	ctx, err := mockDb.SetUpSession(context.Background())
+	require.NoError(t, err)
+
+	return ctx
+}
+
 func TestUserCreationPipeline(t *testing.T) {
 	t.Run("UserCreatedSuccessfully", func(t *testing.T) {
 		pCtx, pCancel, pIn, pOut := userCreationPipeline(setupWorkingUserCreationContext(t))
+		var result models.AuthenticatedUser
+		defer close(pIn)
+		defer pCancel(nil)
+
+		pIn <- setupWorkingUserCreationWorkspace(t)
+
+		after, ok := <-pOut
+		require.True(t, ok, "Reading value from pipeline exit channel failed")
+		require.NoError(t, after.Get(userAuthorizationResponseKey, &result))
+
+		assert.NotZero(t, result.ID)
+		assert.NotZero(t, result.AccessToken)
+		assert.NotZero(t, result.RefreshToken)
+
+		select {
+		case <-pCtx.Done():
+			require.NoError(t, context.Cause(pCtx))
+		default:
+		}
+	})
+}
+
+func TestUserAuthenticationPipeline(t *testing.T) {
+	t.Run("UserAuthenticatedSuccessfully", func(t *testing.T) {
+		pCtx, pCancel, pIn, pOut := userAuthenticationPipeline(setupWorkingUserAuthenticationContext(t))
 		var result models.AuthenticatedUser
 		defer close(pIn)
 		defer pCancel(nil)
