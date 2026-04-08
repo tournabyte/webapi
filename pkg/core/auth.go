@@ -149,8 +149,8 @@ func sessionRefreshPipeline(ctx context.Context) (context.Context, context.Cance
 	out4 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchAccountRecordFromDatabaseByID, out3)
 	out5 := handlerutil.Stage(pipelineCtx, pipelineCancel, createAccessToken, out4)
 	out6 := handlerutil.Stage(pipelineCtx, pipelineCancel, createRefreshToken, out5)
-	out7 := handlerutil.Stage(pipelineCtx, pipelineCancel, deriveSessionRecord, out6)
-	out8 := handlerutil.Stage(pipelineCtx, pipelineCancel, deleteSessionRecord, out7)
+	out7 := handlerutil.Stage(pipelineCtx, pipelineCancel, deleteSessionRecord, out6)
+	out8 := handlerutil.Stage(pipelineCtx, pipelineCancel, deriveSessionRecord, out7)
 	out9 := handlerutil.Stage(pipelineCtx, pipelineCancel, createSessionRecord, out8)
 	out10 := handlerutil.Stage(pipelineCtx, pipelineCancel, populateUserAuthorizationResponse, out9)
 
