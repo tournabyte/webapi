@@ -21,6 +21,7 @@ import (
 	"github.com/tournabyte/webapi/pkg/models"
 )
 
+// Function `(*tournabyteAPIService).addGlobalMiddleware` configures the `gin.Engine` instance with global-level middleware
 func (srv *tournabyteAPIService) addGlobalMiddleware() {
 	srv.router.Use(gin.CustomRecovery(srv.recoverPanicAsFailure))
 	srv.router.Use(gin.LoggerWithConfig(gin.LoggerConfig{
@@ -30,6 +31,7 @@ func (srv *tournabyteAPIService) addGlobalMiddleware() {
 	srv.router.Use(requestid.New())
 }
 
+// Function `(*tournabyteAPIService).registerRoutes` configures the `gin.Engine` instance with the application HTTP handlers
 func (srv *tournabyteAPIService) registerRoutes() {
 	srv.addGlobalMiddleware()
 
@@ -37,9 +39,14 @@ func (srv *tournabyteAPIService) registerRoutes() {
 		// /v1/...
 		v1 := srv.router.Group("v1")
 		srv.addAuthGroup(v1)
+		srv.addEventGroup(v1)
 	}
 }
 
+// Function `(*tournabyteAPIService).addAuthGroup` configures the `gin.Engine` instance with authentication/authorization related endpoints
+//
+// Parameters:
+//   - parentGroup: the parent portion of the API endpoint these handlers will be attached to
 func (srv *tournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
 	authGroup := parentGroup.Group("users")
 
@@ -103,5 +110,38 @@ func (srv *tournabyteAPIService) addAuthGroup(parentGroup *gin.RouterGroup) {
 		),
 	)
 
-	// PUT /v1/users/credentials
+}
+
+// Function `(*tournabyteAPIService).addEventGroup` configures the `gin.Engine` instance with event management related endpoints
+//
+// Parameters:
+//   - parentGroup: the parent portion of the API endpoint these handlers will be attached to
+func (srv *tournabyteAPIService) addEventGroup(parentGroup *gin.RouterGroup) {
+	eventGroup := parentGroup.Group("events")
+
+	// POST /v1/events
+	eventGroup.POST(
+		"/",
+		srv.withMongoSession,
+		srv.withMongoTransaction,
+		handlerutil.HandlerTemplate(
+			srv.initEventCreationWorkspace,
+			eventCreationPipeline,
+			handlerutil.AwaitAndRespondAs[models.EventIDResponse],
+			http.StatusCreated,
+			eventIDResponseKey,
+			srv.errfmt,
+		),
+	)
+
+	// GET /v1/events/{id}
+	// PUT /v1/events/{id}
+	// DELETE /v1/events/{id}
+
+	// POST /v1/events/{id}/participants
+	// PUT /v1/events/{id}/participants/{name}
+	// DELETE /v1/events/{id}/participants/{name}
+
+	// POST /v1/events/{id}/bracket
+	// GET /v1/events/{id}/bracket
 }

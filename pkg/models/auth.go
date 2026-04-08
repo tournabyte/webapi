@@ -25,6 +25,10 @@ var (
 	UserSessionQueryContext = dbx.NewQueryContext(`tournabyte`, `sessions`)
 )
 
+const (
+	ValidatorObjectKey = "validatorObject"
+)
+
 // Type `AuthenticatedUser` represents the response structure for successfully authenticating as a user
 //
 // Fields:
@@ -42,7 +46,7 @@ type AuthenticatedUser struct {
 // Fields:
 //   - Owner: private claim expected to be the userID of the account this token was issued to
 type AuthorizationTokenClaims struct {
-	Owner string `json:"owner" validate:"required,mongodb"`
+	Me string `json:"whoami" validate:"required,mongodb"`
 }
 
 // Type `AuthorizationHeaderContent` represents a key:value pair specifically for the HTTP Authorization header

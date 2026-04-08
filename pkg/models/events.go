@@ -1,0 +1,62 @@
+package models
+
+/*
+ * File: pkg/models/events.go
+ *
+ * Purpose: data models for event management
+ *
+ * License:
+ *  See LICENSE.md for full license
+ *  Copyright 2026 Part of the Tournabyte project
+ *
+ */
+
+import (
+	"github.com/tournabyte/webapi/pkg/dbx"
+	"go.mongodb.org/mongo-driver/v2/bson"
+)
+
+// Variables storing query context associated with event management operations
+var (
+	EventQueryContext = dbx.NewQueryContext(`tournabyte`, `events`)
+)
+
+// Type `CreateEventRequest` represents the request body format for the create event endpoint
+//
+// Fields:
+//   - Name: the name of the event (to show instead of an ID)
+//   - Game: the game the event is focused around
+//   - Description: the description of the event
+type CreateEventRequest struct {
+	Name        string `json:"name" binding:"required,min=4,max=128"`
+	Game        string `json:"game" binding:"required,min=4,max=128"`
+	Description string `json:"description" binding:"max=1024"`
+}
+
+// Type `EventIDResponse` represents a response to an successful event (created/updated/deleted) endpoint usage
+//
+// Fields:
+//   - ID: the event created/updated/deleted
+type EventIDResponse struct {
+	ID string `json:"id"`
+}
+
+// Type `EventRecord` represents a database record for an event
+//
+// Fields:
+//   - ID: the unique ID for this event
+//   - Status: the status of this event (i.e. planned, in-progress, concluded)
+//   - Name: the name of the event
+//   - Game: the game the event is focused around
+//   - Description: the description of the event
+//   - Participants: the participant list for this event
+//   - Bracket: the match bracket for this event
+type EventRecord struct {
+	ID           bson.ObjectID                     `bson:"_id"`
+	Status       string                            `bson:"status"`
+	Name         string                            `bson:"name"`
+	Game         string                            `bson:"game"`
+	Description  string                            `bson:"description"`
+	Participants []string                          `bson:"participants"`
+	Bracket      map[bson.ObjectID][]bson.ObjectID `bson:"bracket"`
+}

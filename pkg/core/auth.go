@@ -23,7 +23,9 @@ import (
 
 	"github.com/alexedwards/argon2id"
 	"github.com/gin-gonic/gin"
+	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
+	"github.com/go-playground/validator/v10"
 	"github.com/tournabyte/webapi/pkg/dbx"
 	"github.com/tournabyte/webapi/pkg/handlerutil"
 	"github.com/tournabyte/webapi/pkg/models"
@@ -38,6 +40,7 @@ const (
 	userAuthorizationResponseKey = "authorizedUserData"
 	userLogoutResponseKey        = "authorizationRevoked"
 	authTokenOptionsKey          = "authorizationTokenOptions"
+	authTokenSigningAlgorithm    = "authorizationTokenSigningAlgorithm"
 	authSessionOptionsKey        = "authorizationSessionOptions"
 	userAccountRecordKey         = "userAccountRecord"
 	userSessionRecordKey         = "userSessionRecord"
@@ -439,7 +442,7 @@ func createAccessToken(ctx context.Context, space *handlerutil.HandlerWorkspace)
 	}
 
 	log.Printf("[HANDLER]: initializing access token claims...")
-	customClaims.Owner = acct.ID.Hex()
+	customClaims.Me = acct.ID.Hex()
 	publicClaims.Issuer = opts.Issuer
 	publicClaims.Subject = opts.Subject
 	publicClaims.IssuedAt = jwt.NewNumericDate(issueTime)
@@ -748,6 +751,76 @@ func fetchSessionRecordFromDatabaseByID(ctx context.Context, space *handlerutil.
 	space.Set(userSessionRecordKey, cur)
 	space.Set(activeUserID, cur.Authorizes)
 	return nil
+}
+
+// Function `validateAccessToken` retrieves the raw token from request context, attempts to decode it, and validates the claims presented
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
+func validateAccessToken(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var raw string
+	var alg string
+	var validator *validator.Validate
+	var publicClaims jwt.Claims
+	var privateClaims models.AuthorizationTokenClaims
+	var tokenOptions models.TokenOptions
+	var err error
+
+	log.Printf("[HANDLER]: loading validation tool from workspace under %q", models.ValidatorObjectKey)
+	if err = space.Get(models.ValidatorObjectKey, &validator); err != nil {
+		log.Printf("[HANDLER]: error loading validation tool (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading authentication token options from workspace under key %q...", authTokenOptionsKey)
+	if err = space.Get(authTokenOptionsKey, &tokenOptions); err != nil {
+		log.Printf("[HANDLER]: error loading authentication toke options (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading authentication token signing algorithm from workspace under key %q...", authTokenSigningAlgorithm)
+	if err = space.Get(authTokenOptionsKey, &alg); err != nil {
+		log.Printf("[HANDLER]: error loading authentication token signing algorithm (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading authetication token from workspace under key %q", activeAccessToken)
+	if err = space.Get(activeAccessToken, &raw); err != nil {
+		log.Printf("[HANDLER]: error loading active access token (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: parsing access token...")
+	if token, err := jwt.ParseSigned(raw, []jose.SignatureAlgorithm{jose.SignatureAlgorithm(alg)}); err != nil {
+		log.Printf("[HANDLER]: error parsing access token (%s)", err.Error())
+		return err
+	} else {
+		log.Printf("[HANDLER]: unmarshalling token claims...")
+		if err = token.Claims(alg, &publicClaims, &privateClaims); err != nil {
+			log.Printf("[HANDLER]: error unmarshalling token claims (%s)", err.Error())
+			return err
+		}
+
+		log.Printf("[HANDLER]: validating public claims...")
+		if err = publicClaims.Validate(jwt.Expected{Subject: tokenOptions.Subject, Issuer: tokenOptions.Issuer}); err != nil {
+			log.Printf("[HANDLER]: error validating public claims (%s)", err.Error())
+			return err
+		}
+
+		log.Printf("[HANDLER]: validating private claims...")
+		if err = validator.Struct(privateClaims); err != nil {
+			log.Printf("[HANDLER]: error validating private claims (%s)", err.Error())
+			return err
+		}
+
+		log.Printf("Token claims successfully validated and token owner noted in workspace under %q", activeUserID)
+		space.Set(activeUserID, privateClaims.Me)
+		return nil
+	}
 }
 
 // Function `validateRefreshToken` determines the validaty of the refresh token according to token storage record
