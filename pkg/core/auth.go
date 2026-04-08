@@ -787,7 +787,7 @@ func validateRefreshToken(ctx context.Context, space *handlerutil.HandlerWorkspa
 		return ErrRefreshTokenExpired
 	}
 
-	log.Printf("[HANDLER]: token successfully validated")
+	log.Printf("[HANDLER]: token (id %q) successfully validated", sess.ID)
 	return nil
 }
 
