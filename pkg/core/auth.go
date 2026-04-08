@@ -803,6 +803,7 @@ func deleteSessionRecord(ctx context.Context, space *handlerutil.HandlerWorkspac
 	var cur models.UserSession
 	var sess *mongo.Session
 	var err error
+	var res *mongo.DeleteResult
 
 	log.Printf("[HANDLER]: loading session details from workspace...")
 	if err = space.Get(userSessionRecordKey, &cur); err != nil {
@@ -816,16 +817,16 @@ func deleteSessionRecord(ctx context.Context, space *handlerutil.HandlerWorkspac
 		return err
 	}
 
-	log.Printf("[HANDLER]: performing database removal operation")
+	log.Printf("[HANDLER]: performing database removal operation (_id=%q)", cur.ID)
 	filter := bson.D{{Key: "_id", Value: cur.ID}}
-	_, err = sess.Client().
+	res, err = sess.Client().
 		Database(models.UserSessionQueryContext.Database).
 		Collection(models.UserSessionQueryContext.Collection).
 		DeleteOne(ctx, filter)
 
-	if err != nil {
+	if err != nil || res.DeletedCount != 1 {
 		log.Printf("[HANDLER]: error performing database deletion (%s)", err.Error())
-		return err
+		return fmt.Errorf("no delete occurred: %w", err)
 	}
 
 	log.Printf("[HANDLER]: session record successfully removed")
