@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -212,6 +213,72 @@ func setupWorkingUserAuthenticationContext(t *testing.T) context.Context {
 	return ctx
 }
 
+func setupWorkingSessionCloseWorkspace(t *testing.T) *handlerutil.HandlerWorkspace {
+	t.Helper()
+	space := handlerutil.DefaultWorkspace()
+	body := models.SessionID{
+		RefreshToken: "abcdefg",
+	}
+	header := models.AuthorizationHeaderContent{
+		Token: "abc.xyz",
+	}
+
+	space.Set(
+		handlerutil.RequestBindings,
+		handlerutil.Bindings{
+			URI: func(a any) error {
+				outVal := reflect.ValueOf(a)
+				if outVal.Kind() != reflect.Pointer || outVal.IsNil() {
+					return handlerutil.ErrNotAddressable
+				}
+
+				valVal := reflect.ValueOf(body)
+				if !valVal.Type().AssignableTo(outVal.Type().Elem()) {
+					return handlerutil.ErrNotAssignable
+				}
+				outVal.Elem().Set(valVal)
+				return nil
+			},
+			Headers: func(a any) error {
+				outVal := reflect.ValueOf(a)
+				if outVal.Kind() != reflect.Pointer || outVal.IsNil() {
+					return handlerutil.ErrNotAddressable
+				}
+
+				valVal := reflect.ValueOf(header)
+				if !valVal.Type().AssignableTo(outVal.Type().Elem()) {
+					return handlerutil.ErrNotAssignable
+				}
+				outVal.Elem().Set(valVal)
+				return nil
+			},
+		},
+	)
+
+	return &space
+
+}
+
+func setupWorkingSessionCloseContext(t *testing.T) context.Context {
+	t.Helper()
+
+	m := drivertest.NewMockDeployment(
+		pingResponse,
+		findSessionOk,
+		deleteOk,
+	)
+
+	mockDb, err := dbx.NewMongoConnection(
+		dbx.ConnectionDeployment(m),
+	)
+	require.NoError(t, err)
+
+	ctx, err := mockDb.SetUpSession(context.Background())
+	require.NoError(t, err)
+
+	return ctx
+}
+
 func TestUserCreationPipeline(t *testing.T) {
 	t.Run("UserCreatedSuccessfully", func(t *testing.T) {
 		pCtx, pCancel, pIn, pOut := userCreationPipeline(setupWorkingUserCreationContext(t))
@@ -278,6 +345,30 @@ func TestSessionRefreshPipeline(t *testing.T) {
 		assert.NotZero(t, result.ID)
 		assert.NotZero(t, result.AccessToken)
 		assert.NotZero(t, result.RefreshToken)
+
+		select {
+		case <-pCtx.Done():
+			require.NoError(t, context.Cause(pCtx))
+		default:
+		}
+	})
+}
+
+func TestSessionClosePipeline(t *testing.T) {
+	t.Run("SessionClosedSuccessfully", func(t *testing.T) {
+		pCtx, pCancel, pIn, pOut := sessionClosePipeline(setupWorkingSessionCloseContext(t))
+		var result gin.H
+		defer close(pIn)
+		defer pCancel(nil)
+
+		pIn <- setupWorkingSessionCloseWorkspace(t)
+
+		after, ok := <-pOut
+		require.True(t, ok, "Reading value from pipeline exit channel failed")
+		require.NoError(t, after.Get(userLogoutResponseKey, &result))
+
+		assert.NotZero(t, result)
+		assert.Contains(t, result, "sessionClosed")
 
 		select {
 		case <-pCtx.Done():
