@@ -35,8 +35,8 @@ import (
 // Workspace keys associated with authentication/authorization workspace tasks
 const (
 	authRequestKey               = "authenticationRequest"
-	authRefreshKey               = "sessionRefreshRequest"
 	userAuthorizationResponseKey = "authorizedUserData"
+	userLogoutResponseKey        = "authorizationRevoked"
 	authTokenOptionsKey          = "authorizationTokenOptions"
 	authSessionOptionsKey        = "authorizationSessionOptions"
 	userAccountRecordKey         = "userAccountRecord"
@@ -44,6 +44,8 @@ const (
 	accessTokenKey               = "userAccessToken"
 	refreshTokenKey              = "userRefreshToken"
 	activeUserID                 = "activeUserID"
+	activeSessionID              = "activeSessionID"
+	activeAccessToken            = "activeAccessToken"
 )
 
 // Errors specific to authentication/authorization workflow tasks
@@ -64,7 +66,7 @@ var (
 func (srv *tournabyteAPIService) initAuthWorkspace(ctx *gin.Context) *handlerutil.HandlerWorkspace {
 	space := handlerutil.DefaultWorkspace()
 
-	bind := handlerutil.BindingsFromRequestContext(ctx, handlerutil.ShouldHaveJSONBody)
+	bind := handlerutil.BindingsFromRequestContext(ctx, handlerutil.ShouldHaveJSONBody|handlerutil.ShouldHaveHeaders|handlerutil.ShouldHaveURIValues)
 	space.Set(handlerutil.RequestBindings, bind)
 	space.Set(authSessionOptionsKey, srv.getSessionConfig())
 	space.Set(authTokenOptionsKey, srv.getTokenConfig())
@@ -141,7 +143,7 @@ func sessionRefreshPipeline(ctx context.Context) (context.Context, context.Cance
 	pipelineCtx, pipelineCancel := context.WithCancelCause(ctx)
 	pipelineInput := make(chan *handlerutil.HandlerWorkspace)
 
-	out1 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindSessionRefreshRequestFormat, pipelineInput)
+	out1 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindSessionIDFromBody, pipelineInput)
 	out2 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchSessionRecordFromDatabaseByID, out1)
 	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, validateRefreshToken, out2)
 	out4 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchAccountRecordFromDatabaseByID, out3)
@@ -153,6 +155,30 @@ func sessionRefreshPipeline(ctx context.Context) (context.Context, context.Cance
 	out10 := handlerutil.Stage(pipelineCtx, pipelineCancel, populateUserAuthorizationResponse, out9)
 
 	return pipelineCtx, pipelineCancel, pipelineInput, out10
+}
+
+// Function `sessionClosePipeline` initializes a handling pipeline for session closure
+//
+// Parameters:
+//   - ctx: the parent context to control the created pipeline
+//
+// Returns:
+//   - `context.Context`: the context controlling the created pipeline (derived from the given context.Context)
+//   - `context.CancelCauseFunc`: the cancellation function controlling pipeline cancellation
+//   - `chan<- *handlerutil.HandlerWorkspace`: the input channel for the pipeline (send-only)
+//   - `<-chan *handlerutil.HandlerWorkspace`: the output channel for the pipeline (read-only)
+func sessionClosePipeline(ctx context.Context) (context.Context, context.CancelCauseFunc, chan<- *handlerutil.HandlerWorkspace, <-chan *handlerutil.HandlerWorkspace) {
+	pipelineCtx, pipelineCancel := context.WithCancelCause(ctx)
+	pipelineInput := make(chan *handlerutil.HandlerWorkspace)
+
+	out1 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindSessionIDFromURI, pipelineInput)
+	out2 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindAccessTokenFromHeader, out1)
+	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchSessionRecordFromDatabaseByID, out2)
+	out4 := handlerutil.Stage(pipelineCtx, pipelineCancel, validateRefreshToken, out3)
+	out5 := handlerutil.Stage(pipelineCtx, pipelineCancel, deleteSessionRecord, out4)
+	out6 := handlerutil.Stage(pipelineCtx, pipelineCancel, confirmLogout, out5)
+
+	return pipelineCtx, pipelineCancel, pipelineInput, out6
 }
 
 // Function `bindAuthenticationRequestFormat` binds the request body and saves it to the handler workspace for later processing
@@ -184,7 +210,7 @@ func bindAuthenticationRequestFormat(ctx context.Context, space *handlerutil.Han
 	return nil
 }
 
-// Function `bindSessionRefreshRequestFormat` binds the request body and saves it to the handler workspace for later processing
+// Function `bindSessionIDFromBody` binds the request body and saves it to the handler workspace for later processing
 //
 // Parameters:
 //   - ctx: the context managing the handler lifecycle
@@ -192,8 +218,8 @@ func bindAuthenticationRequestFormat(ctx context.Context, space *handlerutil.Han
 //
 // Returns:
 //   - `error`: error that occurred during this step of the pipeline
-func bindSessionRefreshRequestFormat(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
-	var body models.SessionRefreshRequest
+func bindSessionIDFromBody(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var body models.SessionID
 	var bindings handlerutil.Bindings
 
 	log.Printf("[HANDLER]: loading request bindings from workspace...")
@@ -208,8 +234,66 @@ func bindSessionRefreshRequestFormat(ctx context.Context, space *handlerutil.Han
 		return err
 	}
 
-	space.Set(authRefreshKey, body)
-	log.Printf("[HANDLER]: saved request body as variable of type %T within workspace under key %q", body, authRefreshKey)
+	space.Set(activeSessionID, body.RefreshToken)
+	log.Printf("[HANDLER]: saved request body as variable of type %T within workspace under key %q", body.RefreshToken, activeSessionID)
+	return nil
+}
+
+// Function `bindSessionIDFromURI` binds the request URI and saves it to the handler workspace for later processing
+//
+// Parameters:
+//   - ctx: the context managing the handler lifecycle
+//   - space: the handler workspace for the session refresh process
+//
+// Returns:
+//   - `error`: error that occurred during this step of the pipeline
+func bindSessionIDFromURI(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var body models.SessionID
+	var bindings handlerutil.Bindings
+
+	log.Printf("[HANDLER]: loading request bindings from workspace...")
+	if err := space.Get(handlerutil.RequestBindings, &bindings); err != nil {
+		log.Printf("[HANDLER]: error loading request bindings from workspace (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: binding request URI to variable of type %T", body)
+	if err := bindings.BindURI(&body); err != nil {
+		log.Printf("[HANDLER]: error binding request URI (%s)", err.Error())
+		return err
+	}
+
+	space.Set(activeSessionID, body.RefreshToken)
+	log.Printf("[HANDLER]: saved request URI as variable of type %T within workspace under key %q", body.RefreshToken, activeSessionID)
+	return nil
+}
+
+// Function `bindAccessTokenFromHeader` binds the access token from the request headers and saves it to the handler workspace for later processing
+//
+// Parameters:
+//   - ctx: the context managing the handler lifecycle
+//   - space: the handler workspace for the session refresh process
+//
+// Returns:
+//   - `error`: error that occurred during this step of the pipeline
+func bindAccessTokenFromHeader(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var accessTokenHeader models.AuthorizationHeaderContent
+	var bindings handlerutil.Bindings
+
+	log.Printf("[HANDLER]: loading request bindings from workspace...")
+	if err := space.Get(handlerutil.RequestBindings, &bindings); err != nil {
+		log.Printf("[HANDLER]: error loading request bindings from workspace (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: binding request headers to variable of type %T", accessTokenHeader)
+	if err := bindings.BindHeaders(&accessTokenHeader); err != nil {
+		log.Printf("[HANDLER]: error binding request headers (%s)", err.Error())
+		return err
+	}
+
+	space.Set(activeAccessToken, accessTokenHeader.Token)
+	log.Printf("[HANDLER]: saved request headers as variable of type %T within workspace under key %q", accessTokenHeader.Token, activeAccessToken)
 	return nil
 }
 
@@ -623,14 +707,14 @@ func fetchAccountRecordFromDatabaseByID(ctx context.Context, space *handlerutil.
 // Returns:
 //   - `error`: error that occurred during this processing step
 func fetchSessionRecordFromDatabaseByID(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
-	var req models.SessionRefreshRequest
+	var refresh string
 	var cur models.UserSession
 	var sess *mongo.Session
 	var cfg *options.FindOneOptionsBuilder
 	var err error
 
-	log.Printf("[HANDLER]: loading authentication refresh information from workspace under key %q", authRefreshKey)
-	if err := space.Get(authRefreshKey, &req); err != nil {
+	log.Printf("[HANDLER]: loading authentication refresh information from workspace under key %q", activeSessionID)
+	if err := space.Get(activeSessionID, &refresh); err != nil {
 		log.Printf("[HANDLER]: error loading authentication refresh information (%s)", err.Error())
 		return err
 	}
@@ -648,7 +732,7 @@ func fetchSessionRecordFromDatabaseByID(ctx context.Context, space *handlerutil.
 	}
 
 	log.Printf("[HANDLER]: performing database lookup operation")
-	filter := bson.D{{Key: "_id", Value: fmt.Sprintf("%x", sha256.Sum256(bytes.NewBufferString(req.RefreshToken).Bytes()))}}
+	filter := bson.D{{Key: "_id", Value: fmt.Sprintf("%x", sha256.Sum256(bytes.NewBufferString(refresh).Bytes()))}}
 	err = sess.Client().
 		Database(models.UserSessionQueryContext.Database).
 		Collection(models.UserSessionQueryContext.Collection).
@@ -745,5 +829,11 @@ func deleteSessionRecord(ctx context.Context, space *handlerutil.HandlerWorkspac
 	}
 
 	log.Printf("[HANDLER]: session record successfully removed")
+	return nil
+}
+
+func confirmLogout(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	log.Printf("[HANDLER]: saved response structure to workspace")
+	space.Set(userLogoutResponseKey, gin.H{"sessionClosed": time.Now().UTC()})
 	return nil
 }

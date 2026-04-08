@@ -157,7 +157,7 @@ func setupWorkingUserCreationWorkspace(t *testing.T) *handlerutil.HandlerWorkspa
 func setupWorkingSessionRefreshWorkspace(t *testing.T) *handlerutil.HandlerWorkspace {
 	t.Helper()
 	space := handlerutil.DefaultWorkspace()
-	body := models.SessionRefreshRequest{
+	body := models.SessionID{
 		RefreshToken: "abcdefg",
 	}
 
