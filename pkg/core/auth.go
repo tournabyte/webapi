@@ -824,9 +824,14 @@ func deleteSessionRecord(ctx context.Context, space *handlerutil.HandlerWorkspac
 		Collection(models.UserSessionQueryContext.Collection).
 		DeleteOne(ctx, filter)
 
-	if err != nil || res.DeletedCount != 1 {
+	if err != nil {
 		log.Printf("[HANDLER]: error performing database deletion (%s)", err.Error())
-		return fmt.Errorf("no delete occurred: %w", err)
+		return err
+	}
+
+	if res.DeletedCount != 1 {
+		log.Printf("[HANDLER]: database deletion removed %d records", res.DeletedCount)
+		return errors.New("unexpected number of documents removed")
 	}
 
 	log.Printf("[HANDLER]: session record successfully removed")
