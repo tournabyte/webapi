@@ -127,7 +127,7 @@ func (srv *tournabyteAPIService) addEventGroup(parentGroup *gin.RouterGroup) {
 		handlerutil.HandlerTemplate(
 			srv.initEventCreationWorkspace,
 			eventCreationPipeline,
-			handlerutil.AwaitAndRespondAs[models.EventIDResponse],
+			handlerutil.AwaitAndRespondAs[models.EventID],
 			http.StatusCreated,
 			eventIDResponseKey,
 			srv.errfmt,
@@ -135,6 +135,19 @@ func (srv *tournabyteAPIService) addEventGroup(parentGroup *gin.RouterGroup) {
 	)
 
 	// GET /v1/events/{id}
+	eventGroup.GET(
+		"/:eventid",
+		srv.withMongoSession,
+		handlerutil.HandlerTemplate(
+			srv.initEventLookupWorkspace,
+			eventRetreivalPipeline,
+			handlerutil.AwaitAndRespondAs[models.EventDetailsResponse],
+			http.StatusOK,
+			eventDetailsResponseKey,
+			srv.errfmt,
+		),
+	)
+
 	// PUT /v1/events/{id}
 	// DELETE /v1/events/{id}
 

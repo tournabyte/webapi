@@ -40,18 +40,37 @@ type CreateEventRequest struct {
 	Description string `json:"description" binding:"max=1024"`
 }
 
-// Type `EventIDResponse` represents a response to an successful event (created/updated/deleted) endpoint usage
+// Type `EventID` represents a response to an successful event (created/updated/deleted) endpoint usage
 //
 // Fields:
 //   - ID: the event created/updated/deleted
-type EventIDResponse struct {
-	ID string `json:"id"`
+type EventID struct {
+	ID string `json:"id" uri:"eventid" binding:"required,mongodb"`
+}
+
+// Type `EventDetailsResponse` represents a subset of the database record for an event delivered when looking up a specific event
+//
+// Fields:
+//   - ID: the unique ID for this event
+//   - Host: the user ID that created this event
+//   - Status: the status of this event
+//   - Name: name of the event
+//   - Game: the game the event is focused around
+//   - Description: description of the event
+type EventDetailsResponse struct {
+	ID          string `json:"id"`
+	Host        string `json:"hostBy"`
+	Status      string `json:"status"`
+	Name        string `json:"name"`
+	Game        string `json:"game"`
+	Description string `json:"description"`
 }
 
 // Type `EventRecord` represents a database record for an event
 //
 // Fields:
 //   - ID: the unique ID for this event
+//   - Host: the user ID that created this event
 //   - Status: the status of this event (i.e. planned, in-progress, concluded)
 //   - Name: the name of the event
 //   - Game: the game the event is focused around

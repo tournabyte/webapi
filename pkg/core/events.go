@@ -26,9 +26,11 @@ import (
 
 // Workspace keys associated with event management workspace tasks
 const (
-	eventCreationRequest = "createEventRequest"
-	eventRecordKey       = "eventRecord"
-	eventIDResponseKey   = "eventIDResponse"
+	eventCreationRequest    = "createEventRequest"
+	eventLookupRequest      = "lookupEventRequest"
+	eventRecordKey          = "eventRecord"
+	eventIDResponseKey      = "eventIDResponse"
+	eventDetailsResponseKey = "eventDetailsResponse"
 )
 
 // Function `(*tournabyteAPIService).initEventCreationWorkspace` initializes the handler workspace for an event creation request handling sequence
@@ -44,11 +46,21 @@ func (srv *tournabyteAPIService) initEventCreationWorkspace(ctx *gin.Context) *h
 
 	space.Set(handlerutil.RequestBindings, binds)
 	space.Set(authTokenOptionsKey, srv.getTokenConfig())
-	space.Set(authTokenSigningAlgorithm, srv.opts.Serve.Sessions.Algorithm)
 	space.Set(models.ValidatorObjectKey, srv.validationFunc)
 	log.Printf("[HANDLER]: setup request bindings")
 	return &space
 
+}
+
+func (srv *tournabyteAPIService) initEventLookupWorkspace(ctx *gin.Context) *handlerutil.HandlerWorkspace {
+	space := handlerutil.DefaultWorkspace()
+	binds := handlerutil.BindingsFromRequestContext(ctx, handlerutil.ShouldHaveURIValues|handlerutil.ShouldHaveHeaders)
+
+	space.Set(handlerutil.RequestBindings, binds)
+	space.Set(authTokenOptionsKey, srv.getTokenConfig())
+	space.Set(models.ValidatorObjectKey, srv.validationFunc)
+	log.Printf("[HANDLER]: setup request bindings")
+	return &space
 }
 
 // Function `eventCreationPipeline` initializes a handling pipeline for event creation
@@ -71,6 +83,29 @@ func eventCreationPipeline(ctx context.Context) (context.Context, context.Cancel
 	out4 := handlerutil.Stage(pipelineCtx, pipelineCancel, deriveEventRecordFromRequest, out3)
 	out5 := handlerutil.Stage(pipelineCtx, pipelineCancel, createEventRecord, out4)
 	pipelineOutput := handlerutil.Stage(pipelineCtx, pipelineCancel, populateEventIDResponse, out5)
+
+	return pipelineCtx, pipelineCancel, pipelineInput, pipelineOutput
+}
+
+// Function `eventRetreivalPipeline` initializes a handling pipeline for event retrieval
+//
+// Parameters:
+//   - ctx: the parent context to control the created pipeline
+//
+// Returns:
+//   - `context.Context`: the context controlling the created pipeline (derived from the given context.Context)
+//   - `context.CancelCauseFunc`: the cancellation function controlling pipeline cancellation
+//   - `chan<- *handlerutil.HandlerWorkspace`: the input channel for the pipeline (send-only)
+//   - `<-chan *handlerutil.HandlerWorkspace`: the output channel for the pipeline (read-only)
+func eventRetreivalPipeline(ctx context.Context) (context.Context, context.CancelCauseFunc, chan<- *handlerutil.HandlerWorkspace, <-chan *handlerutil.HandlerWorkspace) {
+	pipelineCtx, pipelineCancel := context.WithCancelCause(ctx)
+	pipelineInput := make(chan *handlerutil.HandlerWorkspace)
+
+	out1 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindAccessTokenFromHeader, pipelineInput)
+	out2 := handlerutil.Stage(pipelineCtx, pipelineCancel, validateAccessToken, out1)
+	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindEventLookupRequestFromURI, out2)
+	out4 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchEventRecordFromDatabaseByID, out3)
+	pipelineOutput := handlerutil.Stage(pipelineCtx, pipelineCancel, populateEventDetailsResponse, out4)
 
 	return pipelineCtx, pipelineCancel, pipelineInput, pipelineOutput
 }
@@ -101,6 +136,27 @@ func bindEventCreationRequestFromBody(ctx context.Context, space *handlerutil.Ha
 
 	space.Set(eventCreationRequest, body)
 	log.Printf("[HANDLER]: saved request body as variable of type %T within workspace under key %q", body, eventCreationRequest)
+	return nil
+}
+
+func bindEventLookupRequestFromURI(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var lookup models.EventID
+	var bindings handlerutil.Bindings
+
+	log.Printf("[HANDLER]: loading request bindings from workspace...")
+	if err := space.Get(handlerutil.RequestBindings, &bindings); err != nil {
+		log.Printf("[HANDLER]: error loading request bindings from workspace (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: binding request URI to variable of typoe %T...", lookup)
+	if err := bindings.BindURI(&lookup); err != nil {
+		log.Printf("[HANDLER]: error binding request URI (%s)", err.Error())
+		return err
+	}
+
+	space.Set(eventLookupRequest, lookup)
+	log.Printf("[HANDLER]: saved request URI as variable of type %T within workspace under key %q", lookup, eventLookupRequest)
 	return nil
 }
 
@@ -197,6 +253,56 @@ func createEventRecord(ctx context.Context, space *handlerutil.HandlerWorkspace)
 	return err
 }
 
+func fetchEventRecordFromDatabaseByID(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var sess *mongo.Session
+	var event models.EventRecord
+	var req models.EventID
+	var id bson.ObjectID
+	var cfg *options.FindOneOptionsBuilder
+	var err error
+
+	log.Printf("[HANDLER]: loading event lookup request from workspace under %q key into variable of type %T...", eventLookupRequest, req)
+	if err := space.Get(eventLookupRequest, &req); err != nil {
+		log.Printf("[HANDLER]: error loading lookup request (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: interpreting ID presented in lookup request as an ObjectID...")
+	if id, err = bson.ObjectIDFromHex(req.ID); err != nil {
+		log.Printf("[HANDLER]: could not interpret provided ID as an ObjectID (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading database operation settings...")
+	if cfg, err = dbx.NewOptions(dbx.FindOneProjection(bson.E{Key: "participants", Value: 0}, bson.E{Key: "bracket", Value: 0})); err != nil {
+		log.Printf("[HANDLER]: error configuration database operation (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading database session from request context...")
+	if sess, err = dbx.MongoFromContext(ctx); err != nil {
+		log.Printf("[HANDLER]: error loading database session from request context (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: performing database lookup operation")
+	filter := bson.D{{Key: "_id", Value: id}}
+	err = sess.Client().
+		Database(models.EventQueryContext.Database).
+		Collection(models.EventQueryContext.Collection).
+		FindOne(ctx, filter, cfg).
+		Decode(&event)
+
+	if err != nil {
+		log.Printf("[HANDLER]: error during database lookup operation (%s)", err.Error())
+		return err
+	}
+
+	space.Set(eventRecordKey, event)
+	return nil
+
+}
+
 // Function `populateEventIDResponse` uses the request body within the workspace to initialize an event record
 //
 // Parameters:
@@ -207,7 +313,7 @@ func createEventRecord(ctx context.Context, space *handlerutil.HandlerWorkspace)
 //   - `error`: error that occurred during this processing step
 func populateEventIDResponse(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
 	var record models.EventRecord
-	var response models.EventIDResponse
+	var response models.EventID
 	var err error
 
 	log.Printf("[HANDLER]: loading record data from workspace under the %q key into variable of type %T...", eventRecordKey, record)
@@ -221,5 +327,29 @@ func populateEventIDResponse(ctx context.Context, space *handlerutil.HandlerWork
 
 	log.Printf("[HANDLER]: saved response data to workspace under the %q key", eventIDResponseKey)
 	space.Set(eventIDResponseKey, response)
+	return nil
+}
+
+func populateEventDetailsResponse(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var record models.EventRecord
+	var response models.EventDetailsResponse
+	var err error
+
+	log.Printf("[HANDLER]: loading record data from workspace under the %q key into variable of type %T...", eventRecordKey, record)
+	if err = space.Get(eventRecordKey, &record); err != nil {
+		log.Printf("[HANDLER]: error loading event record data (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: populating response fields")
+	response.ID = record.ID.Hex()
+	response.Host = record.Host.Hex()
+	response.Name = record.Name
+	response.Game = record.Game
+	response.Description = record.Description
+	response.Status = record.Status
+
+	log.Printf("[HANDLER]: saved response data to workspace under the %q key", eventDetailsResponseKey)
+	space.Set(eventDetailsResponseKey, response)
 	return nil
 }

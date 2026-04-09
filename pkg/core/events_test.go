@@ -121,7 +121,7 @@ func setupWorkingEventCreationWorkspace(t *testing.T) *handlerutil.HandlerWorksp
 func TestEventCreationPipeline(t *testing.T) {
 	t.Run("EventCreatedSuccessfully", func(t *testing.T) {
 		pCtx, pCancel, pIn, pOut := eventCreationPipeline(setupWorkingEventCreationContext(t))
-		var result models.EventIDResponse
+		var result models.EventID
 		defer close(pIn)
 		defer pCancel(nil)
 
