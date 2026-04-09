@@ -21,6 +21,13 @@ var (
 	EventQueryContext = dbx.NewQueryContext(`tournabyte`, `events`)
 )
 
+// Constants storing status values for an event's status field
+const (
+	StatusPlanned    = "PLANNED"
+	StatusInProgress = "IN-PROGRESS"
+	StatusConcluded  = "CONCLUDED"
+)
+
 // Type `CreateEventRequest` represents the request body format for the create event endpoint
 //
 // Fields:

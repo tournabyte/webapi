@@ -125,6 +125,7 @@ func deriveEventRecordFromRequest(ctx context.Context, space *handlerutil.Handle
 
 	log.Printf("[HANDLER]: populating event record...")
 	record.ID = bson.NewObjectID()
+	record.Status = models.StatusPlanned
 	record.Name = req.Name
 	record.Game = req.Game
 	record.Description = req.Description
