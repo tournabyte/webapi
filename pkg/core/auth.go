@@ -783,7 +783,7 @@ func validateAccessToken(ctx context.Context, space *handlerutil.HandlerWorkspac
 	}
 
 	log.Printf("[HANDLER]: loading authentication token signing algorithm from workspace under key %q...", authTokenSigningAlgorithm)
-	if err = space.Get(authTokenOptionsKey, &alg); err != nil {
+	if err = space.Get(authTokenSigningAlgorithm, &alg); err != nil {
 		log.Printf("[HANDLER]: error loading authentication token signing algorithm (%s)", err.Error())
 		return err
 	}
