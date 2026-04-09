@@ -195,7 +195,7 @@ func populateEventIDResponse(ctx context.Context, space *handlerutil.HandlerWork
 	var err error
 
 	log.Printf("[HANDLER]: loading record data from workspace under the %q key into variable of type %T...", eventRecordKey, record)
-	if err = space.Get(eventCreationRequest, &record); err != nil {
+	if err = space.Get(eventRecordKey, &record); err != nil {
 		log.Printf("[HANDLER]: error loading event record data (%s)", err.Error())
 		return err
 	}
