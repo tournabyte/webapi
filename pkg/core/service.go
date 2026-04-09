@@ -276,5 +276,7 @@ func (srv *tournabyteAPIService) getTokenConfig() models.TokenOptions {
 		Subject:   srv.opts.Serve.Sessions.Subject,
 		Issuer:    srv.opts.Serve.Sessions.Issuer,
 		ExpiresIn: srv.opts.Serve.Sessions.AccessTokenTTL,
+		Algorithm: srv.opts.Serve.Sessions.Algorithm,
+		Key:       srv.opts.Serve.Sessions.SigningKey,
 	}
 }

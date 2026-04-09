@@ -763,7 +763,6 @@ func fetchSessionRecordFromDatabaseByID(ctx context.Context, space *handlerutil.
 //   - `error`: error that occurred during this processing step
 func validateAccessToken(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
 	var raw string
-	var alg string
 	var validator *validator.Validate
 	var publicClaims jwt.Claims
 	var privateClaims models.AuthorizationTokenClaims
@@ -782,12 +781,6 @@ func validateAccessToken(ctx context.Context, space *handlerutil.HandlerWorkspac
 		return err
 	}
 
-	log.Printf("[HANDLER]: loading authentication token signing algorithm from workspace under key %q...", authTokenSigningAlgorithm)
-	if err = space.Get(authTokenSigningAlgorithm, &alg); err != nil {
-		log.Printf("[HANDLER]: error loading authentication token signing algorithm (%s)", err.Error())
-		return err
-	}
-
 	log.Printf("[HANDLER]: loading authetication token from workspace under key %q", activeAccessToken)
 	if err = space.Get(activeAccessToken, &raw); err != nil {
 		log.Printf("[HANDLER]: error loading active access token (%s)", err.Error())
@@ -795,12 +788,12 @@ func validateAccessToken(ctx context.Context, space *handlerutil.HandlerWorkspac
 	}
 
 	log.Printf("[HANDLER]: parsing access token...")
-	if token, err := jwt.ParseSigned(raw, []jose.SignatureAlgorithm{jose.SignatureAlgorithm(alg)}); err != nil {
+	if token, err := jwt.ParseSigned(raw, []jose.SignatureAlgorithm{jose.SignatureAlgorithm(tokenOptions.Algorithm)}); err != nil {
 		log.Printf("[HANDLER]: error parsing access token (%s)", err.Error())
 		return err
 	} else {
 		log.Printf("[HANDLER]: unmarshalling token claims...")
-		if err = token.Claims(alg, &publicClaims, &privateClaims); err != nil {
+		if err = token.Claims(tokenOptions.Key, &publicClaims, &privateClaims); err != nil {
 			log.Printf("[HANDLER]: error unmarshalling token claims (%s)", err.Error())
 			return err
 		}

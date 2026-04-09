@@ -117,6 +117,8 @@ type TokenOptions struct {
 	Subject   string
 	ExpiresIn time.Duration
 	Signer    jose.Signer
+	Key       string
+	Algorithm string
 }
 
 // Type `SessionOptions` groups the information needed to create and verify refresh tokens
