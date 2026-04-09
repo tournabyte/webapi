@@ -793,7 +793,7 @@ func validateAccessToken(ctx context.Context, space *handlerutil.HandlerWorkspac
 		return err
 	} else {
 		log.Printf("[HANDLER]: unmarshalling token claims...")
-		if err = token.Claims(tokenOptions.Key, &publicClaims, &privateClaims); err != nil {
+		if err = token.Claims([]byte(tokenOptions.Key), &publicClaims, &privateClaims); err != nil {
 			log.Printf("[HANDLER]: error unmarshalling token claims (%s)", err.Error())
 			return err
 		}
