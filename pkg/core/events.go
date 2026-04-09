@@ -45,6 +45,7 @@ func (srv *tournabyteAPIService) initEventCreationWorkspace(ctx *gin.Context) *h
 	space.Set(handlerutil.RequestBindings, binds)
 	space.Set(authTokenOptionsKey, srv.getTokenConfig())
 	space.Set(authTokenSigningAlgorithm, srv.opts.Serve.Sessions.Algorithm)
+	space.Set(models.ValidatorObjectKey, srv.validationFunc)
 	log.Printf("[HANDLER]: setup request bindings")
 	return &space
 
