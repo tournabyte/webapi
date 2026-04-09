@@ -114,6 +114,8 @@ func bindEventCreationRequestFromBody(ctx context.Context, space *handlerutil.Ha
 //   - `error`: error that occurred during this processing step
 func deriveEventRecordFromRequest(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
 	var req models.CreateEventRequest
+	var whoami string
+	var id bson.ObjectID
 	var record models.EventRecord
 	var err error
 
@@ -123,8 +125,21 @@ func deriveEventRecordFromRequest(ctx context.Context, space *handlerutil.Handle
 		return err
 	}
 
+	log.Printf("[HANDLER]: loading user ID within access token under %q into variable of type %T...", activeUserID, whoami)
+	if err = space.Get(activeUserID, &whoami); err != nil {
+		log.Printf("[HANDLER]: error loading user ID (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: converting user ID hex to an ObjectID...")
+	if id, err = bson.ObjectIDFromHex(whoami); err != nil {
+		log.Printf("[HANDLER]: error converting user ID hex to ObjectID (%s)", err.Error())
+		return err
+	}
+
 	log.Printf("[HANDLER]: populating event record...")
 	record.ID = bson.NewObjectID()
+	record.Host = id
 	record.Status = models.StatusPlanned
 	record.Name = req.Name
 	record.Game = req.Game

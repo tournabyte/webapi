@@ -60,6 +60,7 @@ type EventIDResponse struct {
 //   - Bracket: the match bracket for this event
 type EventRecord struct {
 	ID           bson.ObjectID                     `bson:"_id"`
+	Host         bson.ObjectID                     `bson:"host"`
 	Status       string                            `bson:"status"`
 	Name         string                            `bson:"name"`
 	Game         string                            `bson:"game"`
