@@ -40,7 +40,6 @@ const (
 	userAuthorizationResponseKey = "authorizedUserData"
 	userLogoutResponseKey        = "authorizationRevoked"
 	authTokenOptionsKey          = "authorizationTokenOptions"
-	authTokenSigningAlgorithm    = "authorizationTokenSigningAlgorithm"
 	authSessionOptionsKey        = "authorizationSessionOptions"
 	userAccountRecordKey         = "userAccountRecord"
 	userSessionRecordKey         = "userSessionRecord"
