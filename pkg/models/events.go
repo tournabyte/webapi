@@ -48,10 +48,10 @@ type CreateEventRequest struct {
 //   - NewDescription: the new description of the event
 //   - NewStatus: the new status of the event
 type UpdateEventRequest struct {
-	NewName        string `json:"name" binding:"min=4,max=128"`
-	NewGame        string `json:"game" binding:"min=4,max=128"`
+	NewName        string `json:"name" binding:"max=128"`
+	NewGame        string `json:"game" binding:"max=128"`
 	NewDescription string `json:"description" binding:"max=1024"`
-	NewStatus      string `json:"status" binding:"min=4,max=128"`
+	NewStatus      string `json:"status" binding:"max=128"`
 }
 
 // Type `EventID` represents a response to an successful event (created/updated/deleted) endpoint usage
