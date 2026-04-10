@@ -164,6 +164,19 @@ func (srv *tournabyteAPIService) addEventGroup(parentGroup *gin.RouterGroup) {
 	)
 
 	// DELETE /v1/events/{id}
+	eventGroup.DELETE(
+		"/:eventid",
+		srv.withMongoSession,
+		srv.withMongoTransaction,
+		handlerutil.HandlerTemplate(
+			srv.initEventLookupWorkspace,
+			eventDeletionPipeline,
+			handlerutil.AwaitAndRespondAs[models.EventID],
+			http.StatusOK,
+			eventIDResponseKey,
+			srv.errfmt,
+		),
+	)
 
 	// POST /v1/events/{id}/participants
 	// PUT /v1/events/{id}/participants/{name}

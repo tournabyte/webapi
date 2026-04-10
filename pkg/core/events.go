@@ -149,6 +149,31 @@ func eventModificiationPipeline(ctx context.Context) (context.Context, context.C
 	return pipelineCtx, pipelineCancel, pipelineInput, pipelineOutput
 }
 
+// Function `eventDeletionPipeline` initializes a handling pipeline for event deletion
+//
+// Parameters:
+//   - ctx: the parent context to control the created pipeline
+//
+// Returns:
+//   - `context.Context`: the context controlling the created pipeline (derived from the given context.Context)
+//   - `context.CancelCauseFunc`: the cancellation function controlling pipeline cancellation
+//   - `chan<- *handlerutil.HandlerWorkspace`: the input channel for the pipeline (send-only)
+//   - `<-chan *handlerutil.HandlerWorkspace`: the output channel for the pipeline (read-only)
+func eventDeletionPipeline(ctx context.Context) (context.Context, context.CancelCauseFunc, chan<- *handlerutil.HandlerWorkspace, <-chan *handlerutil.HandlerWorkspace) {
+	pipelineCtx, pipelineCancel := context.WithCancelCause(ctx)
+	pipelineInput := make(chan *handlerutil.HandlerWorkspace)
+
+	out1 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindAccessTokenFromHeader, pipelineInput)
+	out2 := handlerutil.Stage(pipelineCtx, pipelineCancel, validateAccessToken, out1)
+	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindEventLookupRequestFromURI, out2)
+	out4 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchEventRecordFromDatabaseByID, out3)
+	out5 := handlerutil.Stage(pipelineCtx, pipelineCancel, verifyEventOwnership, out4)
+	out6 := handlerutil.Stage(pipelineCtx, pipelineCancel, removeEventRecordByID, out5)
+	pipelineOutput := handlerutil.Stage(pipelineCtx, pipelineCancel, populateEventIDResponse, out6)
+
+	return pipelineCtx, pipelineCancel, pipelineInput, pipelineOutput
+}
+
 // Function `bindEventCreationRequestFromBody` binds the request body to the event create request format (and validates it)
 //
 // Parameters:
@@ -476,6 +501,45 @@ func applyEventRecordModificationByID(ctx context.Context, space *handlerutil.Ha
 
 	log.Printf("[HANDLER]: update applied to event (_id=%q)", which.ID.Hex())
 	return nil
+}
+
+func removeEventRecordByID(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var which models.EventRecord
+	var sess *mongo.Session
+	var res *mongo.DeleteResult
+	var err error
+
+	log.Printf("[HANDLER]: loading event record from workspace under %q key into variable of type %T...", eventRecordKey, which)
+	if err := space.Get(eventRecordKey, &which); err != nil {
+		log.Printf("[HANDLER]: error loading record (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading database session from request context...")
+	if sess, err = dbx.MongoFromContext(ctx); err != nil {
+		log.Printf("[HANDLER]: error loading database session from request context (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: running database delete...")
+	res, err = sess.Client().
+		Database(models.EventQueryContext.Database).
+		Collection(models.EventQueryContext.Collection).
+		DeleteOne(ctx, bson.D{{Key: "_id", Value: which.ID}})
+
+	if err != nil {
+		log.Printf("[HANDLER]: error during database delete operation (%s)", err.Error())
+		return err
+	}
+
+	if res.DeletedCount != 1 {
+		log.Printf("[HANDLER]: incorrect number of documents updated (%d)", res.DeletedCount)
+		return errors.New("delete not properly applied")
+	}
+
+	log.Printf("[HANDLER]: delete applied to event (_id=%q)", which.ID.Hex())
+	return nil
+
 }
 
 // Function `populateEventIDResponse` uses the request body within the workspace to initialize an event record
