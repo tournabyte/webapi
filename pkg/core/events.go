@@ -67,7 +67,7 @@ func (srv *tournabyteAPIService) initEventLookupWorkspace(ctx *gin.Context) *han
 
 func (srv *tournabyteAPIService) initEventUpdateWorkspace(ctx *gin.Context) *handlerutil.HandlerWorkspace {
 	space := handlerutil.DefaultWorkspace()
-	binds := handlerutil.BindingsFromRequestContext(ctx, handlerutil.ShouldHaveURIValues|handlerutil.ShouldHaveHeaders|handlerutil.ShouldHaveURIValues)
+	binds := handlerutil.BindingsFromRequestContext(ctx, handlerutil.ShouldHaveURIValues|handlerutil.ShouldHaveHeaders|handlerutil.ShouldHaveJSONBody)
 
 	space.Set(handlerutil.RequestBindings, binds)
 	space.Set(authTokenOptionsKey, srv.getTokenConfig())
