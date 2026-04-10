@@ -50,6 +50,11 @@ var (
 			{Key: "firstBatch", Value: findEventDoc},
 		}},
 	}
+	updateOneOk = bson.D{
+		{Key: "ok", Value: 1},
+		{Key: "n", Value: 1},         // matched count
+		{Key: "nModified", Value: 1}, // modified count
+	}
 )
 
 func setupWorkingEventCreationContext(t *testing.T) context.Context {
@@ -79,6 +84,25 @@ func setupWorkingEventLookupContext(t *testing.T) context.Context {
 		findEventOk,
 	)
 
+	mockDb, err := dbx.NewMongoConnection(
+		dbx.ConnectionDeployment(m),
+	)
+	require.NoError(t, err)
+
+	ctx, err := mockDb.SetUpSession(context.Background())
+	require.NoError(t, err)
+
+	return ctx
+}
+
+func setupWorkingEventModificationContext(t *testing.T) context.Context {
+	t.Helper()
+
+	m := drivertest.NewMockDeployment(
+		pingResponse,
+		findEventOk,
+		updateOneOk,
+	)
 	mockDb, err := dbx.NewMongoConnection(
 		dbx.ConnectionDeployment(m),
 	)
@@ -228,6 +252,91 @@ func setupWorkingEventLookupWorkspace(t *testing.T) *handlerutil.HandlerWorkspac
 	return &space
 }
 
+func setupWorkingEventModificationWorkspace(t *testing.T) *handlerutil.HandlerWorkspace {
+	t.Helper()
+	space := handlerutil.DefaultWorkspace()
+	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS256, Key: []byte(`1010101010101010101010101010101010101010101010101010101010101010`)}, nil)
+	require.NoError(t, err)
+	tokenOpts := models.TokenOptions{
+		Subject:   "testsubject",
+		Issuer:    "testissuer",
+		Signer:    signer,
+		ExpiresIn: 5 * time.Minute,
+		Key:       `1010101010101010101010101010101010101010101010101010101010101010`,
+		Algorithm: "HS256",
+	}
+	cl1 := jwt.Claims{
+		Subject:   tokenOpts.Subject,
+		Issuer:    tokenOpts.Issuer,
+		IssuedAt:  jwt.NewNumericDate(time.Now().Add(-time.Minute)),
+		NotBefore: jwt.NewNumericDate(time.Now().Add(-time.Minute)),
+		Expiry:    jwt.NewNumericDate(time.Now().Add(tokenOpts.ExpiresIn)),
+	}
+	cl2 := models.AuthorizationTokenClaims{
+		Me: findEventDoc[0].(bson.M)["host"].(bson.ObjectID).Hex(),
+	}
+	token, err := jwt.Signed(signer).Claims(cl1).Claims(cl2).Serialize()
+	require.NoError(t, err)
+
+	req := models.EventID{
+		ID: findEventDoc[0].(bson.M)["_id"].(bson.ObjectID).Hex(),
+	}
+	header := models.AuthorizationHeaderContent{
+		Token: token,
+	}
+	body := models.UpdateEventRequest{
+		NewStatus: "CONCLUDED",
+	}
+
+	space.Set(handlerutil.RequestBindings, handlerutil.Bindings{
+		URI: func(a any) error {
+			outVal := reflect.ValueOf(a)
+			if outVal.Kind() != reflect.Pointer || outVal.IsNil() {
+				return handlerutil.ErrNotAddressable
+			}
+
+			valVal := reflect.ValueOf(req)
+			if !valVal.Type().AssignableTo(outVal.Type().Elem()) {
+				return handlerutil.ErrNotAssignable
+			}
+			outVal.Elem().Set(valVal)
+			return nil
+		},
+		Headers: func(a any) error {
+			outVal := reflect.ValueOf(a)
+			if outVal.Kind() != reflect.Pointer || outVal.IsNil() {
+				return handlerutil.ErrNotAddressable
+			}
+
+			valVal := reflect.ValueOf(header)
+			if !valVal.Type().AssignableTo(outVal.Type().Elem()) {
+				return handlerutil.ErrNotAssignable
+			}
+			outVal.Elem().Set(valVal)
+			return nil
+		},
+		Body: func(a any) error {
+			outVal := reflect.ValueOf(a)
+			if outVal.Kind() != reflect.Pointer || outVal.IsNil() {
+				return handlerutil.ErrNotAddressable
+			}
+
+			valVal := reflect.ValueOf(body)
+			if !valVal.Type().AssignableTo(outVal.Type().Elem()) {
+				return handlerutil.ErrNotAssignable
+			}
+			outVal.Elem().Set(valVal)
+			return nil
+		},
+	})
+
+	space.Set(authTokenOptionsKey, tokenOpts)
+	space.Set(models.ValidatorObjectKey, validator.New())
+
+	return &space
+
+}
+
 func TestEventCreationPipeline(t *testing.T) {
 	t.Run("EventCreatedSuccessfully", func(t *testing.T) {
 		pCtx, pCancel, pIn, pOut := eventCreationPipeline(setupWorkingEventCreationContext(t))
@@ -269,6 +378,29 @@ func TestEventLookupPipeline(t *testing.T) {
 		assert.NotZero(t, result.Name)
 		assert.NotZero(t, result.Game)
 		assert.NotZero(t, result.Description)
+
+		select {
+		case <-pCtx.Done():
+			require.NoError(t, context.Cause(pCtx))
+		default:
+		}
+	})
+}
+
+func TestEventUpdatePipeline(t *testing.T) {
+	t.Run("EventUpdatedSuccessfully", func(t *testing.T) {
+		pCtx, pCancel, pIn, pOut := eventModificiationPipeline(setupWorkingEventModificationContext(t))
+		var result models.EventID
+		defer close(pIn)
+		defer pCancel(nil)
+
+		pIn <- setupWorkingEventModificationWorkspace(t)
+
+		after, ok := <-pOut
+		require.True(t, ok, "Reading value from pipeline exit channel failed")
+		require.NoError(t, after.Get(eventIDResponseKey, &result))
+
+		assert.NotZero(t, result.ID)
 
 		select {
 		case <-pCtx.Done():
