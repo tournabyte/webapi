@@ -440,16 +440,16 @@ func applyEventRecordModificationByID(ctx context.Context, space *handlerutil.Ha
 	}
 
 	if req.NewName != "" {
-		update = append(update, bson.E{Key: "$set", Value: bson.E{Key: "name", Value: req.NewGame}})
+		update = append(update, bson.E{Key: "$set", Value: bson.D{{Key: "name", Value: req.NewName}}})
 	}
 	if req.NewGame != "" {
-		update = append(update, bson.E{Key: "$set", Value: bson.E{Key: "game", Value: req.NewGame}})
+		update = append(update, bson.E{Key: "$set", Value: bson.D{{Key: "game", Value: req.NewGame}}})
 	}
 	if req.NewDescription != "" {
-		update = append(update, bson.E{Key: "$set", Value: bson.E{Key: "description", Value: req.NewDescription}})
+		update = append(update, bson.E{Key: "$set", Value: bson.D{{Key: "description", Value: req.NewDescription}}})
 	}
 	if req.NewStatus != "" {
-		update = append(update, bson.E{Key: "$set", Value: bson.E{Key: "status", Value: req.NewStatus}})
+		update = append(update, bson.E{Key: "$set", Value: bson.D{{Key: "status", Value: req.NewStatus}}})
 	}
 	log.Printf("[HANDLER]: configured update: %v", update)
 
