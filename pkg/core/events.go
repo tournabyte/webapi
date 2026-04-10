@@ -13,6 +13,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"log"
 
 	"github.com/gin-gonic/gin"
@@ -28,6 +29,7 @@ import (
 const (
 	eventCreationRequest    = "createEventRequest"
 	eventLookupRequest      = "lookupEventRequest"
+	eventUpdateRequest      = "updateEventRequest"
 	eventRecordKey          = "eventRecord"
 	eventIDResponseKey      = "eventIDResponse"
 	eventDetailsResponseKey = "eventDetailsResponse"
@@ -55,6 +57,17 @@ func (srv *tournabyteAPIService) initEventCreationWorkspace(ctx *gin.Context) *h
 func (srv *tournabyteAPIService) initEventLookupWorkspace(ctx *gin.Context) *handlerutil.HandlerWorkspace {
 	space := handlerutil.DefaultWorkspace()
 	binds := handlerutil.BindingsFromRequestContext(ctx, handlerutil.ShouldHaveURIValues|handlerutil.ShouldHaveHeaders)
+
+	space.Set(handlerutil.RequestBindings, binds)
+	space.Set(authTokenOptionsKey, srv.getTokenConfig())
+	space.Set(models.ValidatorObjectKey, srv.validationFunc)
+	log.Printf("[HANDLER]: setup request bindings")
+	return &space
+}
+
+func (srv *tournabyteAPIService) initEventUpdateWorkspace(ctx *gin.Context) *handlerutil.HandlerWorkspace {
+	space := handlerutil.DefaultWorkspace()
+	binds := handlerutil.BindingsFromRequestContext(ctx, handlerutil.ShouldHaveURIValues|handlerutil.ShouldHaveHeaders|handlerutil.ShouldHaveURIValues)
 
 	space.Set(handlerutil.RequestBindings, binds)
 	space.Set(authTokenOptionsKey, srv.getTokenConfig())
@@ -110,6 +123,32 @@ func eventRetreivalPipeline(ctx context.Context) (context.Context, context.Cance
 	return pipelineCtx, pipelineCancel, pipelineInput, pipelineOutput
 }
 
+// Function `eventModificiationPipeline` initializes a handling pipeline for event modification
+//
+// Parameters:
+//   - ctx: the parent context to control the created pipeline
+//
+// Returns:
+//   - `context.Context`: the context controlling the created pipeline (derived from the given context.Context)
+//   - `context.CancelCauseFunc`: the cancellation function controlling pipeline cancellation
+//   - `chan<- *handlerutil.HandlerWorkspace`: the input channel for the pipeline (send-only)
+//   - `<-chan *handlerutil.HandlerWorkspace`: the output channel for the pipeline (read-only)
+func eventModificiationPipeline(ctx context.Context) (context.Context, context.CancelCauseFunc, chan<- *handlerutil.HandlerWorkspace, <-chan *handlerutil.HandlerWorkspace) {
+	pipelineCtx, pipelineCancel := context.WithCancelCause(ctx)
+	pipelineInput := make(chan *handlerutil.HandlerWorkspace)
+
+	out1 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindAccessTokenFromHeader, pipelineInput)
+	out2 := handlerutil.Stage(pipelineCtx, pipelineCancel, validateAccessToken, out1)
+	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindEventLookupRequestFromURI, out2)
+	out4 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchEventRecordFromDatabaseByID, out3)
+	out5 := handlerutil.Stage(pipelineCtx, pipelineCancel, verifyEventOwnership, out4)
+	out6 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindEventModificationRequestFromBody, out5)
+	out7 := handlerutil.Stage(pipelineCtx, pipelineCancel, applyEventRecordModificationByID, out6)
+	pipelineOutput := handlerutil.Stage(pipelineCtx, pipelineCancel, populateEventIDResponse, out7)
+
+	return pipelineCtx, pipelineCancel, pipelineInput, pipelineOutput
+}
+
 // Function `bindEventCreationRequestFromBody` binds the request body to the event create request format (and validates it)
 //
 // Parameters:
@@ -158,6 +197,70 @@ func bindEventLookupRequestFromURI(ctx context.Context, space *handlerutil.Handl
 	space.Set(eventLookupRequest, lookup)
 	log.Printf("[HANDLER]: saved request URI as variable of type %T within workspace under key %q", lookup, eventLookupRequest)
 	return nil
+}
+
+func bindEventModificationRequestFromBody(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var lookup models.EventID
+	var modify models.UpdateEventRequest
+	var bindings handlerutil.Bindings
+
+	log.Printf("[HANDLER]: loading request bindings from workspace...")
+	if err := space.Get(handlerutil.RequestBindings, &bindings); err != nil {
+		log.Printf("[HANDLER]: error loading request bindings from workspace (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: binding request URI to variable of typoe %T...", lookup)
+	if err := bindings.BindURI(&lookup); err != nil {
+		log.Printf("[HANDLER]: error binding request URI (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: binding request body to variable of type %T...", modify)
+	if err := bindings.BindBodyAsJSON(&modify); err != nil {
+		log.Printf("[HANDLER]: error binding request body (%s)", err.Error())
+		return err
+	}
+
+	space.Set(eventLookupRequest, lookup)
+	space.Set(eventUpdateRequest, modify)
+	log.Printf("[HANDLER]: saved request URI as variable of type %T within workspace under key %q", lookup, eventLookupRequest)
+	return nil
+}
+
+func verifyEventOwnership(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var whoami string
+	var userid bson.ObjectID
+	var record models.EventRecord
+	var err error
+
+	log.Printf("[HANDLER]: loading user ID within access token under %q into variable of type %T...", activeUserID, whoami)
+	if err = space.Get(activeUserID, &whoami); err != nil {
+		log.Printf("[HANDLER]: error loading user ID (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: converting user ID hex to an ObjectID...")
+	if userid, err = bson.ObjectIDFromHex(whoami); err != nil {
+		log.Printf("[HANDLER]: error converting user ID hex to ObjectID (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading record data from workspace under the %q key into variable of type %T...", eventRecordKey, record)
+	if err = space.Get(eventRecordKey, &record); err != nil {
+		log.Printf("[HANDLER]: error loading event record data (%s)", err.Error())
+		return err
+	}
+
+	log.Print("[HANDLER]: comparing token user ID to user ID associated with record...")
+	if userid != record.Host {
+		log.Print("[HANDLER]: ownership cannot be verified, rejecting update request")
+		return errors.New("cannot update event that is not owned by you")
+	}
+
+	log.Print("[HANDLER]: ownership verified, proceeding with update")
+	return nil
+
 }
 
 // Function `deriveEventRecordFromRequest` uses the request body within the workspace to initialize an event record
@@ -301,6 +404,78 @@ func fetchEventRecordFromDatabaseByID(ctx context.Context, space *handlerutil.Ha
 	space.Set(eventRecordKey, event)
 	return nil
 
+}
+
+func applyEventRecordModificationByID(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var req models.UpdateEventRequest
+	var cfg *options.UpdateOneOptionsBuilder
+	var err error
+	var update bson.D
+	var which models.EventRecord
+	var sess *mongo.Session
+	var res *mongo.UpdateResult
+
+	log.Printf("[HANDLER]: loading event update request from workspace under %q key into variable of type %T...", eventUpdateRequest, req)
+	if err := space.Get(eventUpdateRequest, &req); err != nil {
+		log.Printf("[HANDLER]: error loading update request (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading event record from workspace under %q key into variable of type %T...", eventRecordKey, which)
+	if err := space.Get(eventRecordKey, &which); err != nil {
+		log.Printf("[HANDLER]: error loading record (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading database operation settings...")
+	if cfg, err = dbx.NewOptions(dbx.ValidateUpdatedDocument(true), dbx.DoInsertOnNoMatchFound(false)); err != nil {
+		log.Printf("[HANDLER]: error configuration database operation (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading database session from request context...")
+	if sess, err = dbx.MongoFromContext(ctx); err != nil {
+		log.Printf("[HANDLER]: error loading database session from request context (%s)", err.Error())
+		return err
+	}
+
+	if req.NewName != "" {
+		update = append(update, bson.E{Key: "$set", Value: bson.E{Key: "name", Value: req.NewGame}})
+	}
+	if req.NewGame != "" {
+		update = append(update, bson.E{Key: "$set", Value: bson.E{Key: "game", Value: req.NewGame}})
+	}
+	if req.NewDescription != "" {
+		update = append(update, bson.E{Key: "$set", Value: bson.E{Key: "description", Value: req.NewDescription}})
+	}
+	if req.NewStatus != "" {
+		update = append(update, bson.E{Key: "$set", Value: bson.E{Key: "status", Value: req.NewStatus}})
+	}
+	log.Printf("[HANDLER]: configured update: %v", update)
+
+	log.Print("[HANDLER]: running database update operation...")
+	res, err = sess.Client().
+		Database(models.EventQueryContext.Database).
+		Collection(models.EventQueryContext.Collection).
+		UpdateByID(
+			ctx,
+			which.ID,
+			update,
+			cfg,
+		)
+
+	if err != nil {
+		log.Printf("[HANDLER]: error during database update operation (%s)", err.Error())
+		return err
+	}
+
+	if res.ModifiedCount != 1 {
+		log.Printf("[HANDLER]: incorrect number of documents updated (%d)", res.ModifiedCount)
+		return errors.New("update not properly applied")
+	}
+
+	log.Printf("[HANDLER]: update applied to event (_id=%q)", which.ID.Hex())
+	return nil
 }
 
 // Function `populateEventIDResponse` uses the request body within the workspace to initialize an event record

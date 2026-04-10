@@ -40,6 +40,20 @@ type CreateEventRequest struct {
 	Description string `json:"description" binding:"max=1024"`
 }
 
+// Type `UpdateEventRequest` represents the request body format for the update event endpoint
+//
+// Fields:
+//   - NewName: the new name of the event
+//   - NewGame: the new game of the event
+//   - NewDescription: the new description of the event
+//   - NewStatus: the new status of the event
+type UpdateEventRequest struct {
+	NewName        string `json:"name" binding:"min=4,max=128"`
+	NewGame        string `json:"game" binding:"min=4,max=128"`
+	NewDescription string `json:"description" binding:"max=1024"`
+	NewStatus      string `json:"status" binding:"min=4,max=128"`
+}
+
 // Type `EventID` represents a response to an successful event (created/updated/deleted) endpoint usage
 //
 // Fields:
