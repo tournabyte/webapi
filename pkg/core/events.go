@@ -583,7 +583,7 @@ func patchEventParticipantList(ctx context.Context, space *handlerutil.HandlerWo
 		return err
 	}
 
-	log.Print("[HANDLER]: running database update operation...")
+	log.Printf("[HANDLER]: running database update operation... set `participants` where _id=%s", which.ID.Hex())
 	res, err = sess.Client().
 		Database(models.EventQueryContext.Database).
 		Collection(models.EventQueryContext.Collection).
