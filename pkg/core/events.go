@@ -676,6 +676,7 @@ func fetchParticipantsFromDatabaseByEventID(ctx context.Context, space *handleru
 		return err
 	}
 
+	log.Printf("[HANDLER]: found participants (%v)", participants)
 	space.Set(eventParticipantListRecordKey, participants)
 	return nil
 }
