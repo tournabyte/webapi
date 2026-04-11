@@ -600,7 +600,7 @@ func patchEventParticipantList(ctx context.Context, space *handlerutil.HandlerWo
 	}
 
 	if res.ModifiedCount != 1 {
-		log.Printf("[HANDLER]: incorrect number of documents updated (%d)", res.ModifiedCount)
+		log.Printf("[HANDLER]: incorrect number of documents updated (found %d; update %d)", res.MatchedCount, res.ModifiedCount)
 		return errors.New("update not properly applied")
 	}
 
