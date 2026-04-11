@@ -54,6 +54,14 @@ type UpdateEventRequest struct {
 	NewStatus      string `json:"status" binding:"max=128"`
 }
 
+// Type `UpdateParticipantListRequest` represents the request body format for the update event participant endpoint
+//
+// Fields:
+//   - NewParticipants: the list of new participants
+type UpdateParticipantListRequest struct {
+	NewParticipants []string `json:"participants"`
+}
+
 // Type `EventID` represents a response to an successful event (created/updated/deleted) endpoint usage
 //
 // Fields:
