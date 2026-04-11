@@ -31,6 +31,7 @@ const (
 	eventLookupRequest             = "lookupEventRequest"
 	eventUpdateRequest             = "updateEventRequest"
 	eventUpdateParticipantsRequest = "updateParticipantsRequest"
+	eventParticipantListRecordKey  = "participantListRecord"
 	eventRecordKey                 = "eventRecord"
 	eventIDResponseKey             = "eventIDResponse"
 	eventDetailsResponseKey        = "eventDetailsResponse"
@@ -201,6 +202,28 @@ func eventParticipantSetterPipeline(ctx context.Context) (context.Context, conte
 	return pipelineCtx, pipelineCancel, pipelineInput, pipelineOutput
 }
 
+// Function `eventParticipantGetterPipeline` initializes a handling pipeline for retrieving an event's participant list
+//
+// Parameters:
+//   - ctx: the parent context to control the created pipeline
+//
+// Returns:
+//   - `context.Context`: the context controlling the created pipeline (derived from the given context.Context)
+//   - `context.CancelCauseFunc`: the cancellation function controlling pipeline cancellation
+//   - `chan<- *handlerutil.HandlerWorkspace`: the input channel for the pipeline (send-only)
+//   - `<-chan *handlerutil.HandlerWorkspace`: the output channel for the pipeline (read-only)
+func eventParticipantGetterPipeline(ctx context.Context) (context.Context, context.CancelCauseFunc, chan<- *handlerutil.HandlerWorkspace, <-chan *handlerutil.HandlerWorkspace) {
+	pipelineCtx, pipelineCancel := context.WithCancelCause(ctx)
+	pipelineInput := make(chan *handlerutil.HandlerWorkspace)
+
+	out1 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindAccessTokenFromHeader, pipelineInput)
+	out2 := handlerutil.Stage(pipelineCtx, pipelineCancel, validateAccessToken, out1)
+	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindEventLookupRequestFromURI, out2)
+	pipelineOutput := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchParticipantsFromDatabaseByEventID, out3)
+
+	return pipelineCtx, pipelineCancel, pipelineInput, pipelineOutput
+}
+
 // Function `bindEventCreationRequestFromBody` binds the request body to the event create request format (and validates it)
 //
 // Parameters:
@@ -281,7 +304,7 @@ func bindEventModificationRequestFromBody(ctx context.Context, space *handleruti
 }
 
 func bindNewParticipantListFromBody(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
-	var modify models.UpdateParticipantListRequest
+	var modify models.EventParticipants
 	var bindings handlerutil.Bindings
 
 	log.Printf("[HANDLER]: loading request bindings from workspace...")
@@ -552,7 +575,7 @@ func applyEventRecordModificationByID(ctx context.Context, space *handlerutil.Ha
 }
 
 func patchEventParticipantList(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
-	var req models.UpdateParticipantListRequest
+	var req models.EventParticipants
 	var cfg *options.UpdateOneOptionsBuilder
 	var err error
 	var which models.EventRecord
@@ -583,14 +606,14 @@ func patchEventParticipantList(ctx context.Context, space *handlerutil.HandlerWo
 		return err
 	}
 
-	log.Printf("[HANDLER]: running database update operation... set `participants=%v` where _id=%s", req.NewParticipants, which.ID.Hex())
+	log.Printf("[HANDLER]: running database update operation... set `participants=%v` where _id=%s", req.List, which.ID.Hex())
 	res, err = sess.Client().
 		Database(models.EventQueryContext.Database).
 		Collection(models.EventQueryContext.Collection).
 		UpdateByID(
 			ctx,
 			which.ID,
-			bson.D{{Key: "$set", Value: bson.D{{Key: "participants", Value: req.NewParticipants}}}},
+			bson.D{{Key: "$set", Value: bson.D{{Key: "participants", Value: req.List}}}},
 			cfg,
 		)
 
@@ -605,6 +628,55 @@ func patchEventParticipantList(ctx context.Context, space *handlerutil.HandlerWo
 	}
 
 	log.Printf("[HANDLER]: update applied to event (_id=%q)", which.ID.Hex())
+	return nil
+}
+
+func fetchParticipantsFromDatabaseByEventID(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var sess *mongo.Session
+	var participants models.EventParticipants
+	var req models.EventID
+	var id bson.ObjectID
+	var cfg *options.FindOneOptionsBuilder
+	var err error
+
+	log.Printf("[HANDLER]: loading event lookup request from workspace under %q key into variable of type %T...", eventLookupRequest, req)
+	if err := space.Get(eventLookupRequest, &req); err != nil {
+		log.Printf("[HANDLER]: error loading lookup request (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: interpreting ID presented in lookup request as an ObjectID...")
+	if id, err = bson.ObjectIDFromHex(req.ID); err != nil {
+		log.Printf("[HANDLER]: could not interpret provided ID as an ObjectID (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading database operation settings...")
+	if cfg, err = dbx.NewOptions(dbx.FindOneProjection(bson.E{Key: "participants", Value: 1})); err != nil {
+		log.Printf("[HANDLER]: error configuration database operation (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading database session from request context...")
+	if sess, err = dbx.MongoFromContext(ctx); err != nil {
+		log.Printf("[HANDLER]: error loading database session from request context (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: performing database lookup operation")
+	filter := bson.D{{Key: "_id", Value: id}}
+	err = sess.Client().
+		Database(models.EventQueryContext.Database).
+		Collection(models.EventQueryContext.Collection).
+		FindOne(ctx, filter, cfg).
+		Decode(&participants)
+
+	if err != nil {
+		log.Printf("[HANDLER]: error during database lookup operation (%s)", err.Error())
+		return err
+	}
+
+	space.Set(eventParticipantListRecordKey, participants)
 	return nil
 }
 

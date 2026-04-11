@@ -193,6 +193,20 @@ func (srv *tournabyteAPIService) addEventGroup(parentGroup *gin.RouterGroup) {
 		),
 	)
 
+	// GET /v1/events/{id}/participants
+	eventGroup.GET(
+		"/:eventid/participants",
+		srv.withMongoSession,
+		handlerutil.HandlerTemplate(
+			srv.initEventLookupWorkspace,
+			eventParticipantGetterPipeline,
+			handlerutil.AwaitAndRespondAs[models.EventParticipants],
+			http.StatusOK,
+			eventParticipantListRecordKey,
+			srv.errfmt,
+		),
+	)
+
 	// PATCH /v1/events/{id}/bracket
 	// GET /v1/events/{id}/bracket
 }
