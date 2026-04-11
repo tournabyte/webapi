@@ -559,7 +559,7 @@ func patchEventParticipantList(ctx context.Context, space *handlerutil.HandlerWo
 	var sess *mongo.Session
 	var res *mongo.UpdateResult
 
-	log.Printf("[HANDLER]: loading event update request from workspace under %q key into variable of type %T...", eventUpdateRequest, req)
+	log.Printf("[HANDLER]: loading event update request from workspace under %q key into variable of type %T...", eventUpdateParticipantsRequest, req)
 	if err := space.Get(eventUpdateParticipantsRequest, &req); err != nil {
 		log.Printf("[HANDLER]: error loading update request (%s)", err.Error())
 		return err
@@ -572,7 +572,7 @@ func patchEventParticipantList(ctx context.Context, space *handlerutil.HandlerWo
 	}
 
 	log.Printf("[HANDLER]: loading database operation settings...")
-	if cfg, err = dbx.NewOptions(dbx.ValidateUpdatedDocument(true), dbx.DoInsertOnNoMatchFound(false)); err != nil {
+	if cfg, err = dbx.NewOptions(dbx.ValidateUpdatedDocument(true), dbx.DoInsertOnNoMatchFound(true)); err != nil {
 		log.Printf("[HANDLER]: error configuration database operation (%s)", err.Error())
 		return err
 	}
