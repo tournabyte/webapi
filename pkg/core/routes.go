@@ -184,7 +184,7 @@ func (srv *tournabyteAPIService) addEventGroup(parentGroup *gin.RouterGroup) {
 		srv.withMongoSession,
 		srv.withMongoTransaction,
 		handlerutil.HandlerTemplate(
-			srv.initEventLookupWorkspace,
+			srv.initEventUpdateWorkspace,
 			eventParticipantSetterPipeline,
 			handlerutil.AwaitAndRespondAs[models.EventID],
 			http.StatusCreated,
