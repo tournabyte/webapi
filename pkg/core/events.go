@@ -291,7 +291,7 @@ func bindNewParticipantListFromBody(ctx context.Context, space *handlerutil.Hand
 	}
 
 	log.Printf("[HANDLER]: binding request body to variable of type %T...", modify)
-	if err := bindings.BindURI(&modify); err != nil {
+	if err := bindings.BindBodyAsJSON(&modify); err != nil {
 		log.Printf("[HANDLER]: error binding request body (%s)", err.Error())
 		return err
 	}
