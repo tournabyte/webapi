@@ -59,7 +59,7 @@ type UpdateEventRequest struct {
 // Fields:
 //   - NewParticipants: the list of new participants
 type EventParticipants struct {
-	List []string `json:"participants"`
+	List []string `json:"participants" bson:"participants"`
 }
 
 // Type `EventID` represents a response to an successful event (created/updated/deleted) endpoint usage
