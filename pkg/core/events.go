@@ -56,6 +56,13 @@ func (srv *tournabyteAPIService) initEventCreationWorkspace(ctx *gin.Context) *h
 
 }
 
+// Function `(*tournabyteAPIService).initEventLookupWorkspace` initializes the handler workspace for an event lookup request handling sequence
+//
+// Parameters:
+//   - ctx: the request context to use during workspace initialization
+//
+// Returns:
+//   - `*handlerutil.HandlerWorkspace`: the workspace for finding an event
 func (srv *tournabyteAPIService) initEventLookupWorkspace(ctx *gin.Context) *handlerutil.HandlerWorkspace {
 	space := handlerutil.DefaultWorkspace()
 	binds := handlerutil.BindingsFromRequestContext(ctx, handlerutil.ShouldHaveURIValues|handlerutil.ShouldHaveHeaders)
@@ -67,6 +74,13 @@ func (srv *tournabyteAPIService) initEventLookupWorkspace(ctx *gin.Context) *han
 	return &space
 }
 
+// Function `(*tournabyteAPIService).initEventUpdateWorkspace` initializes the handler workspace for an event update request handling sequence
+//
+// Parameters:
+//   - ctx: the request context to use during workspace initialization
+//
+// Returns:
+//   - `*handlerutil.HandlerWorkspace`: the workspace for updating an event
 func (srv *tournabyteAPIService) initEventUpdateWorkspace(ctx *gin.Context) *handlerutil.HandlerWorkspace {
 	space := handlerutil.DefaultWorkspace()
 	binds := handlerutil.BindingsFromRequestContext(ctx, handlerutil.ShouldHaveURIValues|handlerutil.ShouldHaveHeaders|handlerutil.ShouldHaveJSONBody)
@@ -253,6 +267,14 @@ func bindEventCreationRequestFromBody(ctx context.Context, space *handlerutil.Ha
 	return nil
 }
 
+// Function `bindEventLookupRequestFromURI` binds the request URI values to the event lookup request format (and validates it)
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
 func bindEventLookupRequestFromURI(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
 	var lookup models.EventID
 	var bindings handlerutil.Bindings
@@ -274,6 +296,14 @@ func bindEventLookupRequestFromURI(ctx context.Context, space *handlerutil.Handl
 	return nil
 }
 
+// Function `bindEventModificationRequestFromBody` binds the request URI values to the event lookup request format (and validates it) and bindes the request body to the event update request format (and validates it)
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
 func bindEventModificationRequestFromBody(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
 	var lookup models.EventID
 	var modify models.UpdateEventRequest
@@ -303,6 +333,14 @@ func bindEventModificationRequestFromBody(ctx context.Context, space *handleruti
 	return nil
 }
 
+// Function `bindNewParticipantListFromBody` binds the request URI values to the event lookup request format (and validates it) and binds the request body to the event update participants request format (and validates it)
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
 func bindNewParticipantListFromBody(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
 	var modify models.EventParticipants
 	var bindings handlerutil.Bindings
@@ -324,6 +362,14 @@ func bindNewParticipantListFromBody(ctx context.Context, space *handlerutil.Hand
 	return nil
 }
 
+// Function `verifyEventOwnership` checks that the owner of the event record is the same as presented in the access token
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
 func verifyEventOwnership(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
 	var whoami string
 	var userid bson.ObjectID
@@ -452,6 +498,14 @@ func createEventRecord(ctx context.Context, space *handlerutil.HandlerWorkspace)
 	return err
 }
 
+// Function `fetchEventRecordFromDatabaseByID` finds the event record within the workspace into the database
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
 func fetchEventRecordFromDatabaseByID(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
 	var sess *mongo.Session
 	var event models.EventRecord
@@ -502,6 +556,14 @@ func fetchEventRecordFromDatabaseByID(ctx context.Context, space *handlerutil.Ha
 
 }
 
+// Function `applyEventRecordModificationByID` updates the event record within the workspace into the database
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
 func applyEventRecordModificationByID(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
 	var req models.UpdateEventRequest
 	var cfg *options.UpdateOneOptionsBuilder
@@ -574,6 +636,14 @@ func applyEventRecordModificationByID(ctx context.Context, space *handlerutil.Ha
 	return nil
 }
 
+// Function `patchEventParticipantList` updates the event participants record within the workspace into the database
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
 func patchEventParticipantList(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
 	var req models.EventParticipants
 	var cfg *options.UpdateOneOptionsBuilder
@@ -631,6 +701,14 @@ func patchEventParticipantList(ctx context.Context, space *handlerutil.HandlerWo
 	return nil
 }
 
+// Function `fetchParticipantsFromDatabaseByEventID` fetches the event participants record within the workspace into the database
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
 func fetchParticipantsFromDatabaseByEventID(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
 	var sess *mongo.Session
 	var participants models.EventParticipants
@@ -681,6 +759,14 @@ func fetchParticipantsFromDatabaseByEventID(ctx context.Context, space *handleru
 	return nil
 }
 
+// Function `removeEventRecordByID` deletes the event participants record within the workspace into the database
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
 func removeEventRecordByID(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
 	var which models.EventRecord
 	var sess *mongo.Session
@@ -720,7 +806,7 @@ func removeEventRecordByID(ctx context.Context, space *handlerutil.HandlerWorksp
 
 }
 
-// Function `populateEventIDResponse` uses the request body within the workspace to initialize an event record
+// Function `populateEventIDResponse` populates the fields for identifying an event by its ID
 //
 // Parameters:
 //   - ctx: the context managing the lifecycle of this handler
@@ -747,6 +833,14 @@ func populateEventIDResponse(ctx context.Context, space *handlerutil.HandlerWork
 	return nil
 }
 
+// Function `populateEventDetailsResponse` populates the fields for the event details response body
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
 func populateEventDetailsResponse(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
 	var record models.EventRecord
 	var response models.EventDetailsResponse
