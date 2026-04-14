@@ -141,7 +141,7 @@ func (srv *tournabyteAPIService) addEventGroup(parentGroup *gin.RouterGroup) {
 		handlerutil.HandlerTemplate(
 			srv.initEventLookupWorkspace,
 			eventRetreivalPipeline,
-			handlerutil.AwaitAndRespondAs[models.EventDetailsResponse],
+			handlerutil.AwaitAndRespondAs[models.EventRecord],
 			http.StatusOK,
 			eventDetailsResponseKey,
 			srv.errfmt,
@@ -178,17 +178,17 @@ func (srv *tournabyteAPIService) addEventGroup(parentGroup *gin.RouterGroup) {
 		),
 	)
 
-	// PATCH /v1/events/{id}/participants
-	eventGroup.PATCH(
+	// POST /v1/events/{id}/participants
+	eventGroup.POST(
 		"/:eventid/participants",
 		srv.withMongoSession,
 		srv.withMongoTransaction,
 		handlerutil.HandlerTemplate(
-			srv.initEventUpdateWorkspace,
-			eventParticipantSetterPipeline,
-			handlerutil.AwaitAndRespondAs[models.EventID],
+			srv.initParticipantCreationWorkspace,
+			createParticipantPipeline,
+			handlerutil.AwaitAndRespondAs[models.ParticipantID],
 			http.StatusCreated,
-			eventIDResponseKey,
+			participatIDResponseKey,
 			srv.errfmt,
 		),
 	)
@@ -199,10 +199,54 @@ func (srv *tournabyteAPIService) addEventGroup(parentGroup *gin.RouterGroup) {
 		srv.withMongoSession,
 		handlerutil.HandlerTemplate(
 			srv.initEventLookupWorkspace,
-			eventParticipantGetterPipeline,
-			handlerutil.AwaitAndRespondAs[models.EventParticipants],
+			listParticipantsPipeline,
+			handlerutil.AwaitAndRespondAs[[]models.EventParticipant],
 			http.StatusOK,
-			eventParticipantListRecordKey,
+			participantListRecordsKey,
+			srv.errfmt,
+		),
+	)
+
+	// GET /v1/events/{id}/participants/{id}
+	eventGroup.GET(
+		"/:eventid/participants/:playerid",
+		srv.withMongoSession,
+		handlerutil.HandlerTemplate(
+			srv.initParticipantLookupWorkspace,
+			getParticipantPipeline,
+			handlerutil.AwaitAndRespondAs[models.EventParticipant],
+			http.StatusOK,
+			participantRecordKey,
+			srv.errfmt,
+		),
+	)
+
+	// PUT /v1/events/{id}/participants/{id}
+	eventGroup.PUT(
+		"/:eventid/participants/:playerid",
+		srv.withMongoSession,
+		srv.withMongoTransaction,
+		handlerutil.HandlerTemplate(
+			srv.initParticipantUpdateWorkspace,
+			updateParticipantPipeline,
+			handlerutil.AwaitAndRespondAs[models.EventParticipant],
+			http.StatusOK,
+			participatIDResponseKey,
+			srv.errfmt,
+		),
+	)
+
+	// DELETE /v1/events/{id}/participants/{id}
+	eventGroup.DELETE(
+		"/:eventid/participants/:playerid",
+		srv.withMongoSession,
+		srv.withMongoTransaction,
+		handlerutil.HandlerTemplate(
+			srv.initParticipantLookupWorkspace,
+			removeParticipantPipeline,
+			handlerutil.AwaitAndRespondAs[models.ParticipantID],
+			http.StatusOK,
+			participatIDResponseKey,
 			srv.errfmt,
 		),
 	)

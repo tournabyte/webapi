@@ -18,7 +18,9 @@ import (
 
 // Variables storing query context associated with event management operations
 var (
-	EventQueryContext = dbx.NewQueryContext(`tournabyte`, `events`)
+	EventQueryContext       = dbx.NewQueryContext(`tournabyte`, `events`)
+	ParticipantQueryContext = dbx.NewQueryContext(`tournabyte`, `participants`)
+	MatchQueryContext       = dbx.NewQueryContext(`tournabyte`, `matches`)
 )
 
 // Constants storing status values for an event's status field
@@ -54,38 +56,12 @@ type UpdateEventRequest struct {
 	NewStatus      string `json:"status" binding:"max=128"`
 }
 
-// Type `EventParticipant` represents the request body format for the update event participant endpoint
-//
-// Fields:
-//   - NewParticipants: the list of new participants
-type EventParticipants struct {
-	List []string `json:"participants" bson:"participants"`
-}
-
 // Type `EventID` represents a response to an successful event (created/updated/deleted) endpoint usage
 //
 // Fields:
 //   - ID: the event created/updated/deleted
 type EventID struct {
 	ID string `json:"id" uri:"eventid" binding:"required,mongodb"`
-}
-
-// Type `EventDetailsResponse` represents a subset of the database record for an event delivered when looking up a specific event
-//
-// Fields:
-//   - ID: the unique ID for this event
-//   - Host: the user ID that created this event
-//   - Status: the status of this event
-//   - Name: name of the event
-//   - Game: the game the event is focused around
-//   - Description: description of the event
-type EventDetailsResponse struct {
-	ID          string `json:"id"`
-	Host        string `json:"hostBy"`
-	Status      string `json:"status"`
-	Name        string `json:"name"`
-	Game        string `json:"game"`
-	Description string `json:"description"`
 }
 
 // Type `EventRecord` represents a database record for an event
@@ -97,15 +73,60 @@ type EventDetailsResponse struct {
 //   - Name: the name of the event
 //   - Game: the game the event is focused around
 //   - Description: the description of the event
-//   - Participants: the participant list for this event
-//   - Bracket: the match bracket for this event
 type EventRecord struct {
-	ID           bson.ObjectID                     `bson:"_id"`
-	Host         bson.ObjectID                     `bson:"host"`
-	Status       string                            `bson:"status"`
-	Name         string                            `bson:"name"`
-	Game         string                            `bson:"game"`
-	Description  string                            `bson:"description"`
-	Participants []string                          `bson:"participants"`
-	Bracket      map[bson.ObjectID][]bson.ObjectID `bson:"bracket"`
+	ID          bson.ObjectID `json:"id" bson:"_id"`
+	Host        bson.ObjectID `json:"hostedBy" bson:"host"`
+	Status      string        `json:"status" bson:"status"`
+	Name        string        `json:"name" bson:"name"`
+	Game        string        `json:"game" bson:"game"`
+	Description string        `json:"description" bson:"description"`
+}
+
+// Type `CreateOrModifyParticipantRequest` represents the request body for a new participant
+//
+// Fields:
+//   - DisplayName: the name to use for the participant's display name
+type CreateOrModifyParticipantRequest struct {
+	DisplayName string `json:"name" binding:"required,min=4,max=64"`
+}
+
+// Type `ParticipantLookupRequest` represents the request URI for looking up a participant
+//
+// Fields:
+//   - EventID: event ID participant is associated with
+//   - PlayerID: participant identifier
+type ParticipantID struct {
+	ID string `uri:"playerid" binding:"required,mongodb"`
+}
+
+// Type `EventParticipant` represent a record of a participant in an event
+//
+// Fields:
+//   - ID: the unique ID of the participant
+//   - DisplayName: the name shown in the UI for this participant
+//   - ParticipatesIn: references the ID of the event this participant takes part in
+type EventParticipant struct {
+	ID             bson.ObjectID `json:"id" bson:"_id"`
+	DisplayName    string        `json:"displayName" bson:"display_name"`
+	ParticipatesIn bson.ObjectID `json:"participatesIn" bson:"participates_in"`
+}
+
+// Type `EventMatch` represents a match record associated with an event
+//
+// Fields:
+//   - ID: the ID of the match
+//   - AwayParticipant: the ID of the away participant or the match it is sourced from
+//   - AwayRef: states whether `AwayParticipant` refers to a participant ID or a match ID
+//   - HomeParticipant: the ID of the home participant or the match it is sourced from
+//   - HomeRef: states whether `HomeParticipant` refers to a participant ID or a match ID
+//   - Winner: the declared winner of the match (used by match referencing this match to populate participants)
+//   - TakesPlaceDuring: references the ObjectID of the event this match is associated with
+type EventMatch struct {
+	ID               bson.ObjectID `json:"id" bson:"_id"`
+	AwayParticipant  bson.ObjectID `json:"away" bson:"away"`
+	AwayRef          string        `json:"-" bson:"away_ref"`
+	HomeParticipant  bson.ObjectID `json:"home" bson:"home"`
+	HomeRef          string        `json:"-" bson:"home_ref"`
+	Winner           bson.ObjectID `json:"winner,omitempty" bson:"winner,omitempty"`
+	TakesPlaceDuring bson.ObjectID `json:"takesPlaceDuring" bson:"takes_place_during"`
 }
