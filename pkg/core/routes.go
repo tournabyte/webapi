@@ -143,7 +143,7 @@ func (srv *tournabyteAPIService) addEventGroup(parentGroup *gin.RouterGroup) {
 			eventRetreivalPipeline,
 			handlerutil.AwaitAndRespondAs[models.EventRecord],
 			http.StatusOK,
-			eventDetailsResponseKey,
+			eventRecordKey,
 			srv.errfmt,
 		),
 	)

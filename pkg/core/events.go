@@ -32,7 +32,6 @@ const (
 	eventUpdateRequest         = "updateEventRequest"
 	eventRecordKey             = "eventRecord"
 	eventIDResponseKey         = "eventIDResponse"
-	eventDetailsResponseKey    = "eventDetailsResponse"
 	participatIDResponseKey    = "participantIdResponse"
 	participantCreationRequest = "createParticipantRequest"
 	participantLookupRequest   = "lookupParticipantRequest"
