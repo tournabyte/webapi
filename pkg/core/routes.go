@@ -229,7 +229,7 @@ func (srv *tournabyteAPIService) addEventGroup(parentGroup *gin.RouterGroup) {
 		handlerutil.HandlerTemplate(
 			srv.initParticipantUpdateWorkspace,
 			updateParticipantPipeline,
-			handlerutil.AwaitAndRespondAs[models.EventParticipant],
+			handlerutil.AwaitAndRespondAs[models.ParticipantID],
 			http.StatusOK,
 			participatIDResponseKey,
 			srv.errfmt,
