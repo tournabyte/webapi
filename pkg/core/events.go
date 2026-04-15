@@ -330,8 +330,7 @@ func updateParticipantPipeline(ctx context.Context) (context.Context, context.Ca
 	out5 := handlerutil.Stage(pipelineCtx, pipelineCancel, verifyEventOwnership, out4)
 	out6 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindNewParticipantRequestFromBody, out5)
 	out7 := handlerutil.Stage(pipelineCtx, pipelineCancel, verifyEventModifiable, out6)
-	out8 := handlerutil.Stage(pipelineCtx, pipelineCancel, updateParticipantRecord, out7)
-	pipelineOutput := handlerutil.Stage(pipelineCtx, pipelineCancel, populateEventIDResponse, out8)
+	pipelineOutput := handlerutil.Stage(pipelineCtx, pipelineCancel, updateParticipantRecord, out7)
 
 	return pipelineCtx, pipelineCancel, pipelineInput, pipelineOutput
 }
@@ -346,8 +345,7 @@ func removeParticipantPipeline(ctx context.Context) (context.Context, context.Ca
 	out4 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchEventRecordFromDatabaseByID, out3)
 	out5 := handlerutil.Stage(pipelineCtx, pipelineCancel, verifyEventOwnership, out4)
 	out6 := handlerutil.Stage(pipelineCtx, pipelineCancel, verifyEventModifiable, out5)
-	out7 := handlerutil.Stage(pipelineCtx, pipelineCancel, removeParticipantRecord, out6)
-	pipelineOutput := handlerutil.Stage(pipelineCtx, pipelineCancel, populateEventIDResponse, out7)
+	pipelineOutput := handlerutil.Stage(pipelineCtx, pipelineCancel, removeParticipantRecord, out6)
 
 	return pipelineCtx, pipelineCancel, pipelineInput, pipelineOutput
 }
@@ -1019,6 +1017,8 @@ func removeParticipantRecord(ctx context.Context, space *handlerutil.HandlerWork
 		log.Printf("[HANDLER]: incorrect number of documents deleted (removed %d)", res.DeletedCount)
 		return errors.New("delete not properly applied")
 	}
+
+	space.Set(participatIDResponseKey, whichParticipant)
 	return nil
 }
 
