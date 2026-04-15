@@ -1033,7 +1033,7 @@ func TestEventParticipantPipeline(t *testing.T) {
 
 	t.Run("ModifyEventParticipant", func(t *testing.T) {
 		pCtx, pCancel, pIn, pOut := updateParticipantPipeline(setupWorkingUpdateParticipantContext(t))
-		var result models.EventID
+		var result models.ParticipantID
 		defer close(pIn)
 		defer pCancel(nil)
 
@@ -1041,9 +1041,10 @@ func TestEventParticipantPipeline(t *testing.T) {
 
 		after, ok := <-pOut
 		require.True(t, ok, "Reading value from pipeline exit channel failed")
-		require.NoError(t, after.Get(eventIDResponseKey, &result))
+		require.NoError(t, after.Get(participatIDResponseKey, &result))
 
-		assert.NotZero(t, result.ID)
+		assert.NotZero(t, result.EID)
+		assert.NotZero(t, result.PID)
 
 		select {
 		case <-pCtx.Done():
@@ -1054,7 +1055,7 @@ func TestEventParticipantPipeline(t *testing.T) {
 
 	t.Run("DeleteEventParticipant", func(t *testing.T) {
 		pCtx, pCancel, pIn, pOut := removeParticipantPipeline(setupWorkingRemoveParticipantContext(t))
-		var result models.EventID
+		var result models.ParticipantID
 		defer close(pIn)
 		defer pCancel(nil)
 
@@ -1062,9 +1063,10 @@ func TestEventParticipantPipeline(t *testing.T) {
 
 		after, ok := <-pOut
 		require.True(t, ok, "Reading value from pipeline exit channel failed")
-		require.NoError(t, after.Get(eventIDResponseKey, &result))
+		require.NoError(t, after.Get(participatIDResponseKey, &result))
 
-		assert.NotZero(t, result.ID)
+		assert.NotZero(t, result.EID)
+		assert.NotZero(t, result.PID)
 
 		select {
 		case <-pCtx.Done():
