@@ -35,7 +35,6 @@ const (
 	eventDetailsResponseKey    = "eventDetailsResponse"
 	participatIDResponseKey    = "participantIdResponse"
 	participantCreationRequest = "createParticipantRequest"
-	participantUpdateRequest   = "updateParticipantRequest"
 	participantLookupRequest   = "lookupParticipantRequest"
 	participantRecordKey       = "participantRecord"
 	participantListRecordsKey  = "participantRecordList"
@@ -305,9 +304,8 @@ func getParticipantPipeline(ctx context.Context) (context.Context, context.Cance
 
 	out1 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindAccessTokenFromHeader, pipelineInput)
 	out2 := handlerutil.Stage(pipelineCtx, pipelineCancel, validateAccessToken, out1)
-	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindEventLookupRequestFromURI, out2)
-	out4 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindParticipantLookupRequestFromURI, out3)
-	pipelineOutput := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchParticipantFromDatabaseByPlayerID, out4)
+	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindParticipantLookupRequestFromURI, out2)
+	pipelineOutput := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchParticipantFromDatabaseByPlayerID, out3)
 
 	return pipelineCtx, pipelineCancel, pipelineInput, pipelineOutput
 }
@@ -328,7 +326,7 @@ func updateParticipantPipeline(ctx context.Context) (context.Context, context.Ca
 
 	out1 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindAccessTokenFromHeader, pipelineInput)
 	out2 := handlerutil.Stage(pipelineCtx, pipelineCancel, validateAccessToken, out1)
-	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindEventLookupRequestFromURI, out2)
+	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindParticipantLookupRequestFromURI, out2)
 	out4 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchEventRecordFromDatabaseByID, out3)
 	out5 := handlerutil.Stage(pipelineCtx, pipelineCancel, verifyEventOwnership, out4)
 	out6 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindNewParticipantRequestFromBody, out5)
@@ -345,13 +343,12 @@ func removeParticipantPipeline(ctx context.Context) (context.Context, context.Ca
 
 	out1 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindAccessTokenFromHeader, pipelineInput)
 	out2 := handlerutil.Stage(pipelineCtx, pipelineCancel, validateAccessToken, out1)
-	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindEventLookupRequestFromURI, out2)
+	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindParticipantLookupRequestFromURI, out2)
 	out4 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchEventRecordFromDatabaseByID, out3)
 	out5 := handlerutil.Stage(pipelineCtx, pipelineCancel, verifyEventOwnership, out4)
-	out6 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindNewParticipantRequestFromBody, out5)
-	out7 := handlerutil.Stage(pipelineCtx, pipelineCancel, verifyEventModifiable, out6)
-	out8 := handlerutil.Stage(pipelineCtx, pipelineCancel, removeParticipantRecord, out7)
-	pipelineOutput := handlerutil.Stage(pipelineCtx, pipelineCancel, populateEventIDResponse, out8)
+	out6 := handlerutil.Stage(pipelineCtx, pipelineCancel, verifyEventModifiable, out5)
+	out7 := handlerutil.Stage(pipelineCtx, pipelineCancel, removeParticipantRecord, out6)
+	pipelineOutput := handlerutil.Stage(pipelineCtx, pipelineCancel, populateEventIDResponse, out7)
 
 	return pipelineCtx, pipelineCancel, pipelineInput, pipelineOutput
 }
@@ -414,6 +411,14 @@ func bindEventLookupRequestFromURI(ctx context.Context, space *handlerutil.Handl
 	return nil
 }
 
+// Function `bindParticipantLookupRequestFromURI` binds the request URI values to the participant lookup request format (and validates it)
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
 func bindParticipantLookupRequestFromURI(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
 	var lookup models.ParticipantID
 	var bindings handlerutil.Bindings
@@ -424,14 +429,15 @@ func bindParticipantLookupRequestFromURI(ctx context.Context, space *handlerutil
 		return err
 	}
 
-	log.Printf("[HANDLER]: binding request URI to variable of typoe %T...", lookup)
+	log.Printf("[HANDLER]: binding request URI to variable of type %T...", lookup)
 	if err := bindings.BindURI(&lookup); err != nil {
 		log.Printf("[HANDLER]: error binding request URI (%s)", err.Error())
 		return err
 	}
 
 	space.Set(participantLookupRequest, lookup)
-	log.Printf("[HANDLER]: saved request URI as variable of type %T within workspace under key %q", lookup, eventLookupRequest)
+	space.Set(eventLookupRequest, models.EventID{ID: lookup.EID})
+	log.Printf("[HANDLER]: saved request URI as variable of type %T within workspace under key %q", lookup, participantLookupRequest)
 	return nil
 }
 
@@ -472,7 +478,7 @@ func bindEventModificationRequestFromBody(ctx context.Context, space *handleruti
 	return nil
 }
 
-// Function `bindNewParticipantListFromBody` binds the request body to the create participants request format (and validates it)
+// Function `bindNewParticipantRequestFromBody` binds the request body to the create participants request format (and validates it)
 //
 // Parameters:
 //   - ctx: the context managing the lifecycle of this handler
@@ -740,6 +746,7 @@ func createParticipantRecord(ctx context.Context, space *handlerutil.HandlerWork
 		log.Printf("[HANDLER]: error during database insertion operation (%s)", err.Error())
 	}
 
+	space.Set(participatIDResponseKey, models.ParticipantID{EID: player.ParticipatesIn.Hex(), PID: player.ID.Hex()})
 	return err
 
 }
@@ -898,13 +905,13 @@ func updateParticipantRecord(ctx context.Context, space *handlerutil.HandlerWork
 	var sess *mongo.Session
 	var res *mongo.UpdateResult
 
-	log.Printf("[HANDLER]: loading event update request from workspace under %q key into variable of type %T...", participantUpdateRequest, modify)
-	if err := space.Get(participantUpdateRequest, &modify); err != nil {
+	log.Printf("[HANDLER]: loading event update request from workspace under %q key into variable of type %T...", participantCreationRequest, modify)
+	if err := space.Get(participantCreationRequest, &modify); err != nil {
 		log.Printf("[HANDLER]: error loading update request (%s)", err.Error())
 		return err
 	}
 
-	log.Printf("[HANDLER]: loading event record from workspace under %q key into variable of type %T...", eventRecordKey, which)
+	log.Printf("[HANDLER]: loading event record from workspace under %q key into variable of type %T...", participantLookupRequest, which)
 	if err := space.Get(participantLookupRequest, &which); err != nil {
 		log.Printf("[HANDLER]: error loading record (%s)", err.Error())
 		return err
@@ -928,7 +935,7 @@ func updateParticipantRecord(ctx context.Context, space *handlerutil.HandlerWork
 		Collection(models.ParticipantQueryContext.Collection).
 		UpdateByID(
 			ctx,
-			which.ID,
+			which.PID,
 			bson.D{{Key: "$set", Value: bson.D{{Key: "display_name", Value: modify.DisplayName}}}},
 			cfg,
 		)
@@ -943,7 +950,7 @@ func updateParticipantRecord(ctx context.Context, space *handlerutil.HandlerWork
 		return errors.New("update not properly applied")
 	}
 
-	log.Printf("[HANDLER]: update applied to event (_id=%q)", which.ID)
+	log.Printf("[HANDLER]: update applied to event (_id=%q)", which.EID)
 	return nil
 }
 
@@ -958,23 +965,10 @@ func updateParticipantRecord(ctx context.Context, space *handlerutil.HandlerWork
 func removeParticipantRecord(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
 	var err error
 	var whichParticipant models.ParticipantID
-	var whichEvent models.EventID
 	var playerID bson.ObjectID
 	var eventID bson.ObjectID
 	var sess *mongo.Session
 	var res *mongo.DeleteResult
-
-	log.Printf("[HANDLER]: loading event lookup request from workspace under %q key into variable of type %T...", eventLookupRequest, whichEvent)
-	if err := space.Get(eventLookupRequest, &whichEvent); err != nil {
-		log.Printf("[HANDLER]: error loading record (%s)", err.Error())
-		return err
-	}
-
-	log.Printf("[HANDLER]: interpreting ID presented in lookup request as an ObjectID...")
-	if eventID, err = bson.ObjectIDFromHex(whichEvent.ID); err != nil {
-		log.Printf("[HANDLER]: could not interpret provided ID as an ObjectID (%s)", err.Error())
-		return err
-	}
 
 	log.Printf("[HANDLER]: loading participant lookup request from workspace under %q key into variable of type %T...", participantLookupRequest, whichParticipant)
 	if err := space.Get(participantLookupRequest, &whichParticipant); err != nil {
@@ -983,7 +977,13 @@ func removeParticipantRecord(ctx context.Context, space *handlerutil.HandlerWork
 	}
 
 	log.Printf("[HANDLER]: interpreting ID presented in lookup request as an ObjectID...")
-	if playerID, err = bson.ObjectIDFromHex(whichParticipant.ID); err != nil {
+	if playerID, err = bson.ObjectIDFromHex(whichParticipant.PID); err != nil {
+		log.Printf("[HANDLER]: could not interpret provided ID as an ObjectID (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: interpreting ID presented in lookup request as an ObjectID...")
+	if eventID, err = bson.ObjectIDFromHex(whichParticipant.EID); err != nil {
 		log.Printf("[HANDLER]: could not interpret provided ID as an ObjectID (%s)", err.Error())
 		return err
 	}
@@ -1026,7 +1026,7 @@ func removeParticipantRecord(ctx context.Context, space *handlerutil.HandlerWork
 func fetchParticipantsFromDatabaseByEventID(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
 	var sess *mongo.Session
 	var cur *mongo.Cursor
-	var participants []models.EventParticipant
+	var participants []models.EventParticipant = make([]models.EventParticipant, 0)
 	var req models.EventID
 	var id bson.ObjectID
 	var err error
@@ -1056,7 +1056,12 @@ func fetchParticipantsFromDatabaseByEventID(ctx context.Context, space *handleru
 		Collection(models.ParticipantQueryContext.Collection).
 		Find(ctx, filter)
 
-	if err != nil || cur.All(ctx, &participants) != nil {
+	if err != nil {
+		log.Printf("[HANDLER]: error during database lookup operation (%s)", err.Error())
+		return err
+	}
+
+	if err = cur.All(ctx, &participants); err != nil {
 		log.Printf("[HANDLER]: error during database lookup operation (%s)", err.Error())
 		return err
 	}
@@ -1068,24 +1073,11 @@ func fetchParticipantsFromDatabaseByEventID(ctx context.Context, space *handleru
 
 func fetchParticipantFromDatabaseByPlayerID(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
 	var sess *mongo.Session
-	var reqEvent models.EventID
 	var reqPlayer models.ParticipantID
 	var eventID bson.ObjectID
 	var playerID bson.ObjectID
 	var player models.EventParticipant
 	var err error
-
-	log.Printf("[HANDLER]: loading event lookup request from workspace under %q key into variable of type %T...", eventLookupRequest, reqEvent)
-	if err := space.Get(eventLookupRequest, &reqEvent); err != nil {
-		log.Printf("[HANDLER]: error loading lookup request (%s)", err.Error())
-		return err
-	}
-
-	log.Printf("[HANDLER]: interpreting ID presented in lookup request as an ObjectID...")
-	if eventID, err = bson.ObjectIDFromHex(reqEvent.ID); err != nil {
-		log.Printf("[HANDLER]: could not interpret provided ID as an ObjectID (%s)", err.Error())
-		return err
-	}
 
 	log.Printf("[HANDLER]: loading participant lookup request from workspace under %q key into variable of type %T...", participantLookupRequest, reqPlayer)
 	if err := space.Get(participantLookupRequest, &reqPlayer); err != nil {
@@ -1094,8 +1086,20 @@ func fetchParticipantFromDatabaseByPlayerID(ctx context.Context, space *handleru
 	}
 
 	log.Printf("[HANDLER]: interpreting ID presented in lookup request as an ObjectID...")
-	if playerID, err = bson.ObjectIDFromHex(reqPlayer.ID); err != nil {
+	if playerID, err = bson.ObjectIDFromHex(reqPlayer.PID); err != nil {
 		log.Printf("[HANDLER]: could not interpret provided ID as an ObjectID (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: interpreting ID presented in lookup request as an ObjectID...")
+	if eventID, err = bson.ObjectIDFromHex(reqPlayer.EID); err != nil {
+		log.Printf("[HANDLER]: could not interpret provided ID as an ObjectID (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading database session from request context...")
+	if sess, err = dbx.MongoFromContext(ctx); err != nil {
+		log.Printf("[HANDLER]: error loading database session from request context (%s)", err.Error())
 		return err
 	}
 

@@ -32,14 +32,12 @@ import (
 var (
 	findEventDoc = bson.A{
 		bson.M{
-			"_id":          bson.NewObjectID(),
-			"host":         bson.NewObjectID(),
-			"status":       models.StatusConcluded,
-			"name":         "Testing Tournament",
-			"game":         "Rock-Paper-Scissors",
-			"description":  "A test tournament for rps",
-			"participants": bson.A{"Rock", "Paper", "Scissors"},
-			"bracket":      bson.M{},
+			"_id":         bson.NewObjectID(),
+			"host":        bson.NewObjectID(),
+			"status":      models.StatusPlanned,
+			"name":        "Testing Tournament",
+			"game":        "Rock-Paper-Scissors",
+			"description": "A test tournament for rps",
 		},
 	}
 	findEventOk = bson.D{
@@ -48,6 +46,46 @@ var (
 			{Key: "id", Value: int64(0)},
 			{Key: "ns", Value: "tournabyte.events"},
 			{Key: "firstBatch", Value: findEventDoc},
+		}},
+	}
+	findParticipantDoc = bson.A{
+		bson.M{
+			"_id":             bson.NewObjectID(),
+			"display_name":    "Spock",
+			"participates_in": findEventDoc[0].(bson.M)["_id"].(bson.ObjectID),
+		},
+	}
+	findParticipantOk = bson.D{
+		{Key: "ok", Value: 1},
+		{Key: "cursor", Value: bson.D{
+			{Key: "id", Value: int64(0)},
+			{Key: "ns", Value: "tournabyte.participants"},
+			{Key: "firstBatch", Value: findParticipantDoc},
+		}},
+	}
+	listParticipantsDocs = bson.A{
+		bson.M{
+			"_id":             bson.NewObjectID(),
+			"display_name":    "Rock",
+			"participates_in": findEventDoc[0].(bson.M)["_id"].(bson.ObjectID),
+		},
+		bson.M{
+			"_id":             bson.NewObjectID(),
+			"display_name":    "Paper",
+			"participates_in": findEventDoc[0].(bson.M)["_id"].(bson.ObjectID),
+		},
+		bson.M{
+			"_id":             bson.NewObjectID(),
+			"display_name":    "Scissors",
+			"participates_in": findEventDoc[0].(bson.M)["_id"].(bson.ObjectID),
+		},
+	}
+	listParticipantOk = bson.D{
+		{Key: "ok", Value: 1},
+		{Key: "cursor", Value: bson.D{
+			{Key: "id", Value: int64(0)},
+			{Key: "ns", Value: "tournabyte.participants"},
+			{Key: "firstBatch", Value: listParticipantsDocs},
 		}},
 	}
 	updateOneOk = bson.D{
@@ -137,7 +175,7 @@ func setupWorkingEventRemovalContext(t *testing.T) context.Context {
 	return ctx
 }
 
-func setupWorkingParticipantSetterContext(t *testing.T) context.Context {
+func setupWorkingCreateParticipantContext(t *testing.T) context.Context {
 	t.Helper()
 
 	m := drivertest.NewMockDeployment(
@@ -156,12 +194,68 @@ func setupWorkingParticipantSetterContext(t *testing.T) context.Context {
 	return ctx
 }
 
-func setupWorkingParticipantGetterContext(t *testing.T) context.Context {
+func setupWorkingLookupParticipantContext(t *testing.T) context.Context {
+	t.Helper()
+
+	m := drivertest.NewMockDeployment(
+		pingResponse,
+		findParticipantOk,
+	)
+	mockDb, err := dbx.NewMongoConnection(
+		dbx.ConnectionDeployment(m),
+	)
+	require.NoError(t, err)
+
+	ctx, err := mockDb.SetUpSession(context.Background())
+	require.NoError(t, err)
+
+	return ctx
+}
+
+func setupWorkingListParticipantsContext(t *testing.T) context.Context {
+	t.Helper()
+
+	m := drivertest.NewMockDeployment(
+		pingResponse,
+		listParticipantOk,
+	)
+	mockDb, err := dbx.NewMongoConnection(
+		dbx.ConnectionDeployment(m),
+	)
+	require.NoError(t, err)
+
+	ctx, err := mockDb.SetUpSession(context.Background())
+	require.NoError(t, err)
+
+	return ctx
+}
+
+func setupWorkingUpdateParticipantContext(t *testing.T) context.Context {
 	t.Helper()
 
 	m := drivertest.NewMockDeployment(
 		pingResponse,
 		findEventOk,
+		updateOneOk,
+	)
+	mockDb, err := dbx.NewMongoConnection(
+		dbx.ConnectionDeployment(m),
+	)
+	require.NoError(t, err)
+
+	ctx, err := mockDb.SetUpSession(context.Background())
+	require.NoError(t, err)
+
+	return ctx
+}
+
+func setupWorkingRemoveParticipantContext(t *testing.T) context.Context {
+	t.Helper()
+
+	m := drivertest.NewMockDeployment(
+		pingResponse,
+		findEventOk,
+		deleteOneOk,
 	)
 	mockDb, err := dbx.NewMongoConnection(
 		dbx.ConnectionDeployment(m),
@@ -464,7 +558,7 @@ func setupWorkingEventRemovalWorkspace(t *testing.T) *handlerutil.HandlerWorkspa
 	return &space
 }
 
-func setupWorkingParticipantSetterWorkspace(t *testing.T) *handlerutil.HandlerWorkspace {
+func setupWorkingCreateParticipantWorkspace(t *testing.T) *handlerutil.HandlerWorkspace {
 	t.Helper()
 	space := handlerutil.DefaultWorkspace()
 	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS256, Key: []byte(`1010101010101010101010101010101010101010101010101010101010101010`)}, nil)
@@ -496,8 +590,8 @@ func setupWorkingParticipantSetterWorkspace(t *testing.T) *handlerutil.HandlerWo
 	header := models.AuthorizationHeaderContent{
 		Token: token,
 	}
-	body := models.EventParticipants{
-		List: []string{"Rock", "Paper", "Scissors"},
+	body := models.CreateOrModifyParticipantRequest{
+		DisplayName: "Spock",
 	}
 
 	space.Set(handlerutil.RequestBindings, handlerutil.Bindings{
@@ -508,6 +602,231 @@ func setupWorkingParticipantSetterWorkspace(t *testing.T) *handlerutil.HandlerWo
 			}
 
 			valVal := reflect.ValueOf(req)
+			if !valVal.Type().AssignableTo(outVal.Type().Elem()) {
+				return handlerutil.ErrNotAssignable
+			}
+			outVal.Elem().Set(valVal)
+			return nil
+		},
+		Headers: func(a any) error {
+			outVal := reflect.ValueOf(a)
+			if outVal.Kind() != reflect.Pointer || outVal.IsNil() {
+				return handlerutil.ErrNotAddressable
+			}
+
+			valVal := reflect.ValueOf(header)
+			if !valVal.Type().AssignableTo(outVal.Type().Elem()) {
+				return handlerutil.ErrNotAssignable
+			}
+			outVal.Elem().Set(valVal)
+			return nil
+		},
+		Body: func(a any) error {
+			outVal := reflect.ValueOf(a)
+			if outVal.Kind() != reflect.Pointer || outVal.IsNil() {
+				return handlerutil.ErrNotAddressable
+			}
+
+			valVal := reflect.ValueOf(body)
+			if !valVal.Type().AssignableTo(outVal.Type().Elem()) {
+				return handlerutil.ErrNotAssignable
+			}
+			outVal.Elem().Set(valVal)
+			return nil
+		},
+	})
+
+	space.Set(authTokenOptionsKey, tokenOpts)
+	space.Set(models.ValidatorObjectKey, validator.New())
+
+	return &space
+}
+
+func setupWorkingListParticipantsWorkspace(t *testing.T) *handlerutil.HandlerWorkspace {
+	t.Helper()
+	space := handlerutil.DefaultWorkspace()
+	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS256, Key: []byte(`1010101010101010101010101010101010101010101010101010101010101010`)}, nil)
+	require.NoError(t, err)
+	tokenOpts := models.TokenOptions{
+		Subject:   "testsubject",
+		Issuer:    "testissuer",
+		Signer:    signer,
+		ExpiresIn: 5 * time.Minute,
+		Key:       `1010101010101010101010101010101010101010101010101010101010101010`,
+		Algorithm: "HS256",
+	}
+	cl1 := jwt.Claims{
+		Subject:   tokenOpts.Subject,
+		Issuer:    tokenOpts.Issuer,
+		IssuedAt:  jwt.NewNumericDate(time.Now().Add(-time.Minute)),
+		NotBefore: jwt.NewNumericDate(time.Now().Add(-time.Minute)),
+		Expiry:    jwt.NewNumericDate(time.Now().Add(tokenOpts.ExpiresIn)),
+	}
+	cl2 := models.AuthorizationTokenClaims{
+		Me: findEventDoc[0].(bson.M)["host"].(bson.ObjectID).Hex(),
+	}
+	token, err := jwt.Signed(signer).Claims(cl1).Claims(cl2).Serialize()
+	require.NoError(t, err)
+
+	req := models.EventID{
+		ID: findEventDoc[0].(bson.M)["_id"].(bson.ObjectID).Hex(),
+	}
+	header := models.AuthorizationHeaderContent{
+		Token: token,
+	}
+
+	space.Set(handlerutil.RequestBindings, handlerutil.Bindings{
+		URI: func(a any) error {
+			outVal := reflect.ValueOf(a)
+			if outVal.Kind() != reflect.Pointer || outVal.IsNil() {
+				return handlerutil.ErrNotAddressable
+			}
+
+			valVal := reflect.ValueOf(req)
+			if !valVal.Type().AssignableTo(outVal.Type().Elem()) {
+				return handlerutil.ErrNotAssignable
+			}
+			outVal.Elem().Set(valVal)
+			return nil
+		},
+		Headers: func(a any) error {
+			outVal := reflect.ValueOf(a)
+			if outVal.Kind() != reflect.Pointer || outVal.IsNil() {
+				return handlerutil.ErrNotAddressable
+			}
+
+			valVal := reflect.ValueOf(header)
+			if !valVal.Type().AssignableTo(outVal.Type().Elem()) {
+				return handlerutil.ErrNotAssignable
+			}
+			outVal.Elem().Set(valVal)
+			return nil
+		},
+	})
+
+	space.Set(authTokenOptionsKey, tokenOpts)
+	space.Set(models.ValidatorObjectKey, validator.New())
+
+	return &space
+}
+
+func setupWorkingLookupParticipantWorkspace(t *testing.T) *handlerutil.HandlerWorkspace {
+	t.Helper()
+	space := handlerutil.DefaultWorkspace()
+
+	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS256, Key: []byte(`1010101010101010101010101010101010101010101010101010101010101010`)}, nil)
+	require.NoError(t, err)
+	tokenOpts := models.TokenOptions{
+		Subject:   "testsubject",
+		Issuer:    "testissuer",
+		Signer:    signer,
+		ExpiresIn: 5 * time.Minute,
+		Key:       `1010101010101010101010101010101010101010101010101010101010101010`,
+		Algorithm: "HS256",
+	}
+	cl1 := jwt.Claims{
+		Subject:   tokenOpts.Subject,
+		Issuer:    tokenOpts.Issuer,
+		IssuedAt:  jwt.NewNumericDate(time.Now().Add(-time.Minute)),
+		NotBefore: jwt.NewNumericDate(time.Now().Add(-time.Minute)),
+		Expiry:    jwt.NewNumericDate(time.Now().Add(tokenOpts.ExpiresIn)),
+	}
+	cl2 := models.AuthorizationTokenClaims{
+		Me: findEventDoc[0].(bson.M)["host"].(bson.ObjectID).Hex(),
+	}
+	token, err := jwt.Signed(signer).Claims(cl1).Claims(cl2).Serialize()
+	require.NoError(t, err)
+
+	player := models.ParticipantID{
+		EID: findEventDoc[0].(bson.M)["_id"].(bson.ObjectID).Hex(),
+		PID: findParticipantDoc[0].(bson.M)["_id"].(bson.ObjectID).Hex(),
+	}
+	header := models.AuthorizationHeaderContent{
+		Token: token,
+	}
+
+	space.Set(handlerutil.RequestBindings, handlerutil.Bindings{
+		URI: func(a any) error {
+			outVal := reflect.ValueOf(a)
+			if outVal.Kind() != reflect.Pointer || outVal.IsNil() {
+				return handlerutil.ErrNotAddressable
+			}
+
+			valVal := reflect.ValueOf(player)
+			if !valVal.Type().AssignableTo(outVal.Type().Elem()) {
+
+				return handlerutil.ErrNotAssignable
+			}
+			outVal.Elem().Set(valVal)
+			return nil
+		},
+		Headers: func(a any) error {
+			outVal := reflect.ValueOf(a)
+			if outVal.Kind() != reflect.Pointer || outVal.IsNil() {
+				return handlerutil.ErrNotAddressable
+			}
+
+			valVal := reflect.ValueOf(header)
+			if !valVal.Type().AssignableTo(outVal.Type().Elem()) {
+				return handlerutil.ErrNotAssignable
+			}
+			outVal.Elem().Set(valVal)
+			return nil
+		},
+	})
+
+	space.Set(authTokenOptionsKey, tokenOpts)
+	space.Set(models.ValidatorObjectKey, validator.New())
+
+	return &space
+}
+
+func setupWorkingUpdateParticipantWorkspace(t *testing.T) *handlerutil.HandlerWorkspace {
+	t.Helper()
+	space := handlerutil.DefaultWorkspace()
+
+	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS256, Key: []byte(`1010101010101010101010101010101010101010101010101010101010101010`)}, nil)
+	require.NoError(t, err)
+	tokenOpts := models.TokenOptions{
+		Subject:   "testsubject",
+		Issuer:    "testissuer",
+		Signer:    signer,
+		ExpiresIn: 5 * time.Minute,
+		Key:       `1010101010101010101010101010101010101010101010101010101010101010`,
+		Algorithm: "HS256",
+	}
+	cl1 := jwt.Claims{
+		Subject:   tokenOpts.Subject,
+		Issuer:    tokenOpts.Issuer,
+		IssuedAt:  jwt.NewNumericDate(time.Now().Add(-time.Minute)),
+		NotBefore: jwt.NewNumericDate(time.Now().Add(-time.Minute)),
+		Expiry:    jwt.NewNumericDate(time.Now().Add(tokenOpts.ExpiresIn)),
+	}
+	cl2 := models.AuthorizationTokenClaims{
+		Me: findEventDoc[0].(bson.M)["host"].(bson.ObjectID).Hex(),
+	}
+	token, err := jwt.Signed(signer).Claims(cl1).Claims(cl2).Serialize()
+	require.NoError(t, err)
+
+	uri := models.ParticipantID{
+		PID: findParticipantDoc[0].(bson.M)["_id"].(bson.ObjectID).Hex(),
+		EID: findEventDoc[0].(bson.M)["_id"].(bson.ObjectID).Hex(),
+	}
+	body := models.CreateOrModifyParticipantRequest{
+		DisplayName: "THE_SPOCK_RULEZ",
+	}
+	header := models.AuthorizationHeaderContent{
+		Token: token,
+	}
+
+	space.Set(handlerutil.RequestBindings, handlerutil.Bindings{
+		URI: func(a any) error {
+			outVal := reflect.ValueOf(a)
+			if outVal.Kind() != reflect.Pointer || outVal.IsNil() {
+				return handlerutil.ErrNotAddressable
+			}
+
+			valVal := reflect.ValueOf(uri)
 			if !valVal.Type().AssignableTo(outVal.Type().Elem()) {
 				return handlerutil.ErrNotAssignable
 			}
@@ -575,7 +894,7 @@ func TestEventCreationPipeline(t *testing.T) {
 func TestEventLookupPipeline(t *testing.T) {
 	t.Run("EventLookupSuccessful", func(t *testing.T) {
 		pCtx, pCancel, pIn, pOut := eventRetreivalPipeline(setupWorkingEventLookupContext(t))
-		var result models.EventDetailsResponse
+		var result models.EventRecord
 		defer close(pIn)
 		defer pCancel(nil)
 
@@ -583,7 +902,7 @@ func TestEventLookupPipeline(t *testing.T) {
 
 		after, ok := <-pOut
 		require.True(t, ok, "Reading value from pipeline exit channel failed")
-		require.NoError(t, after.Get(eventDetailsResponseKey, &result))
+		require.NoError(t, after.Get(eventRecordKey, &result))
 
 		assert.NotZero(t, result.ID)
 		assert.NotZero(t, result.Host)
@@ -646,13 +965,79 @@ func TestEventDeletePipeline(t *testing.T) {
 }
 
 func TestEventParticipantPipeline(t *testing.T) {
-	t.Run("SetParticipantsSuccessfully", func(t *testing.T) {
-		pCtx, pCancel, pIn, pOut := eventParticipantSetterPipeline(setupWorkingParticipantSetterContext(t))
+	t.Run("CreateParticipantSuccessfully", func(t *testing.T) {
+		pCtx, pCancel, pIn, pOut := createParticipantPipeline(setupWorkingCreateParticipantContext(t))
+		var result models.ParticipantID
+		defer close(pIn)
+		defer pCancel(nil)
+
+		pIn <- setupWorkingCreateParticipantWorkspace(t)
+
+		after, ok := <-pOut
+		require.True(t, ok, "Reading value from pipeline exit channel failed")
+		require.NoError(t, after.Get(participatIDResponseKey, &result))
+
+		assert.NotZero(t, result.EID)
+		assert.NotZero(t, result.PID)
+
+		select {
+		case <-pCtx.Done():
+			require.NoError(t, context.Cause(pCtx))
+		default:
+		}
+	})
+
+	t.Run("LookupEventParticipants", func(t *testing.T) {
+		pCtx, pCancel, pIn, pOut := listParticipantsPipeline(setupWorkingListParticipantsContext(t))
+		var result []models.EventParticipant
+		defer close(pIn)
+		defer pCancel(nil)
+
+		pIn <- setupWorkingListParticipantsWorkspace(t)
+
+		after, ok := <-pOut
+		require.True(t, ok, "Reading value from pipeline exit channel failed")
+		require.NoError(t, after.Get(participantListRecordsKey, &result))
+
+		assert.Equal(t, len(listParticipantsDocs), len(result))
+
+		select {
+		case <-pCtx.Done():
+			require.NoError(t, context.Cause(pCtx))
+		default:
+		}
+	})
+
+	t.Run("LookupEventParticipantByID", func(t *testing.T) {
+		pCtx, pCancel, pIn, pOut := getParticipantPipeline(setupWorkingLookupParticipantContext(t))
+		var result models.EventParticipant
+		defer close(pIn)
+		defer pCancel(nil)
+
+		pIn <- setupWorkingLookupParticipantWorkspace(t)
+
+		after, ok := <-pOut
+		require.True(t, ok, "Reading value from pipeline exit channel failed")
+		require.NoError(t, after.Get(participantRecordKey, &result))
+
+		assert.NotZero(t, result.ID)
+		assert.NotZero(t, result.DisplayName)
+		assert.NotZero(t, result.ParticipatesIn)
+
+		select {
+		case <-pCtx.Done():
+			require.NoError(t, context.Cause(pCtx))
+		default:
+		}
+	})
+
+	t.Run("ModifyEventParticipant", func(t *testing.T) {
+		pCtx, pCancel, pIn, pOut := updateParticipantPipeline(setupWorkingUpdateParticipantContext(t))
 		var result models.EventID
 		defer close(pIn)
 		defer pCancel(nil)
 
-		pIn <- setupWorkingParticipantSetterWorkspace(t)
+		pIn <- setupWorkingUpdateParticipantWorkspace(t)
 
 		after, ok := <-pOut
 		require.True(t, ok, "Reading value from pipeline exit channel failed")
@@ -667,19 +1052,19 @@ func TestEventParticipantPipeline(t *testing.T) {
 		}
 	})
 
-	t.Run("GetParticipantsSuccessfully", func(t *testing.T) {
-		pCtx, pCancel, pIn, pOut := eventParticipantGetterPipeline(setupWorkingParticipantGetterContext(t))
-		var result models.EventParticipants
+	t.Run("DeleteEventParticipant", func(t *testing.T) {
+		pCtx, pCancel, pIn, pOut := removeParticipantPipeline(setupWorkingRemoveParticipantContext(t))
+		var result models.EventID
 		defer close(pIn)
 		defer pCancel(nil)
 
-		pIn <- setupWorkingEventLookupWorkspace(t)
+		pIn <- setupWorkingLookupParticipantWorkspace(t)
 
 		after, ok := <-pOut
 		require.True(t, ok, "Reading value from pipeline exit channel failed")
-		require.NoError(t, after.Get(eventParticipantListRecordKey, &result))
+		require.NoError(t, after.Get(eventIDResponseKey, &result))
 
-		assert.NotEmpty(t, result.List)
+		assert.NotZero(t, result.ID)
 
 		select {
 		case <-pCtx.Done():

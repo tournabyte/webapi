@@ -93,10 +93,11 @@ type CreateOrModifyParticipantRequest struct {
 // Type `ParticipantLookupRequest` represents the request URI for looking up a participant
 //
 // Fields:
-//   - EventID: event ID participant is associated with
-//   - PlayerID: participant identifier
+//   - EID: event ID participant is associated with
+//   - PID: participant identifier
 type ParticipantID struct {
-	ID string `uri:"playerid" binding:"required,mongodb"`
+	EID string `uri:"eventid" binding:"required,mongodb" json:"eventid"`
+	PID string `uri:"playerid" binding:"required,mongodb" json:"playerid"`
 }
 
 // Type `EventParticipant` represent a record of a participant in an event
