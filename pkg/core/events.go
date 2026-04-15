@@ -901,6 +901,7 @@ func updateParticipantRecord(ctx context.Context, space *handlerutil.HandlerWork
 	var cfg *options.UpdateOneOptionsBuilder
 	var err error
 	var which models.ParticipantID
+	var playerID bson.ObjectID
 	var sess *mongo.Session
 	var res *mongo.UpdateResult
 
@@ -916,8 +917,14 @@ func updateParticipantRecord(ctx context.Context, space *handlerutil.HandlerWork
 		return err
 	}
 
+	log.Printf("[HANDLER]: interpreting ID presented in lookup request as an ObjectID...")
+	if playerID, err = bson.ObjectIDFromHex(which.PID); err != nil {
+		log.Printf("[HANDLER]: could not interpret provided ID as an ObjectID (%s)", err.Error())
+		return err
+	}
+
 	log.Printf("[HANDLER]: loading database operation settings...")
-	if cfg, err = dbx.NewOptions(dbx.ValidateUpdatedDocument(true), dbx.DoInsertOnNoMatchFound(true)); err != nil {
+	if cfg, err = dbx.NewOptions(dbx.ValidateUpdatedDocument(true), dbx.DoInsertOnNoMatchFound(false)); err != nil {
 		log.Printf("[HANDLER]: error configuration database operation (%s)", err.Error())
 		return err
 	}
@@ -934,7 +941,7 @@ func updateParticipantRecord(ctx context.Context, space *handlerutil.HandlerWork
 		Collection(models.ParticipantQueryContext.Collection).
 		UpdateByID(
 			ctx,
-			which.PID,
+			playerID,
 			bson.D{{Key: "$set", Value: bson.D{{Key: "display_name", Value: modify.DisplayName}}}},
 			cfg,
 		)
