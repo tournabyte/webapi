@@ -956,6 +956,7 @@ func updateParticipantRecord(ctx context.Context, space *handlerutil.HandlerWork
 		return errors.New("update not properly applied")
 	}
 
+	space.Set(participatIDResponseKey, which)
 	log.Printf("[HANDLER]: update applied to event (_id=%q)", which.EID)
 	return nil
 }
