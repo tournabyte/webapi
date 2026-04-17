@@ -259,9 +259,9 @@ func (srv *tournabyteAPIService) addEventGroup(parentGroup *gin.RouterGroup) {
 		handlerutil.HandlerTemplate(
 			srv.initEventLookupWorkspace,
 			createMatchSetPipeline,
-			handlerutil.AwaitAndRespondAs[models.EventID],
+			handlerutil.AwaitAndRespondAs[models.EventRecord],
 			http.StatusCreated,
-			eventIDResponseKey,
+			eventRecordKey,
 			srv.errfmt,
 		),
 	)

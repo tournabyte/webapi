@@ -718,6 +718,7 @@ func bindMatchLookupRequestFromURI(ctx context.Context, space *handlerutil.Handl
 	}
 
 	space.Set(matchLookupRequest, uri)
+	space.Set(eventLookupRequest, models.EventID{ID: uri.EID})
 	log.Printf("[HANDLER]: saved request body as variable of type %T within workspace under key %q", uri, matchLookupRequest)
 	return nil
 }
@@ -740,9 +741,9 @@ func bindMatchWinnerDeclarationRequestFromBody(ctx context.Context, space *handl
 		return err
 	}
 
-	log.Printf("[HANDLER]: binding request uri to variable of type %T...", body)
-	if err := bindings.BindURI(&body); err != nil {
-		log.Printf("[HANDLER]: error binding request uri (%s)", err.Error())
+	log.Printf("[HANDLER]: binding request body to variable of type %T...", body)
+	if err := bindings.BindBodyAsJSON(&body); err != nil {
+		log.Printf("[HANDLER]: error binding request body (%s)", err.Error())
 		return err
 	}
 
@@ -994,7 +995,7 @@ func deriveMatchSetFromParticipantList(ctx context.Context, space *handlerutil.H
 	}
 
 	log.Print("[HANDLER]: propogating BYE matches...")
-	for i := int(matchCount); i >= 0; i-- {
+	for i := int(matchCount) - 1; i >= 0; i-- {
 		if matchList[i].AwayParticipant == bson.NilObjectID && matchList[i].HomeParticipant != bson.NilObjectID {
 			matchList[i].Winner = matchList[i].HomeParticipant
 		}
