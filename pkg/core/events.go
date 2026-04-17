@@ -15,6 +15,8 @@ import (
 	"context"
 	"errors"
 	"log"
+	"math/bits"
+	"slices"
 
 	"github.com/gin-gonic/gin"
 	"github.com/tournabyte/webapi/pkg/dbx"
@@ -37,6 +39,11 @@ const (
 	participantLookupRequest   = "lookupParticipantRequest"
 	participantRecordKey       = "participantRecord"
 	participantListRecordsKey  = "participantRecordList"
+	matchRecordKey             = "matchRecord"
+	matchListRecordKey         = "matchListRecords"
+	matchLookupRequest         = "matchLookupRequest"
+	matchDeclareWinnerRequest  = "matchWinnerDeclaredRequest"
+	matchIDResponseKey         = "matchIDResponse"
 )
 
 // Function `(*tournabyteAPIService).initEventCreationWorkspace` initializes the handler workspace for an event creation request handling sequence
@@ -130,9 +137,34 @@ func (srv *tournabyteAPIService) initParticipantLookupWorkspace(ctx *gin.Context
 	return &space
 }
 
+// Function `(*tournabyteAPIService).initParticipantUpdateWorkspace` initializes the handler workspace for an participant update request handling sequence
+//
+// Parameters:
+//   - ctx: the request context to use during workspace initialization
+//
+// Returns:
+//   - `*handlerutil.HandlerWorkspace`: the workspace for finding a participant
 func (srv *tournabyteAPIService) initParticipantUpdateWorkspace(ctx *gin.Context) *handlerutil.HandlerWorkspace {
 	space := handlerutil.DefaultWorkspace()
 	binds := handlerutil.BindingsFromRequestContext(ctx, handlerutil.ShouldHaveURIValues|handlerutil.ShouldHaveHeaders|handlerutil.ShouldHaveJSONBody)
+
+	space.Set(handlerutil.RequestBindings, binds)
+	space.Set(authTokenOptionsKey, srv.getTokenConfig())
+	space.Set(models.ValidatorObjectKey, srv.validationFunc)
+	log.Printf("[HANDLER]: setup request bindings")
+	return &space
+}
+
+// Function `(*tournabyteAPIService).initMatchLookupWorkspace` initializes the handler workspace for an match lookup request handling sequence
+//
+// Parameters:
+//   - ctx: the request context to use during workspace initialization
+//
+// Returns:
+//   - `*handlerutil.HandlerWorkspace`: the workspace for finding a participant
+func (srv *tournabyteAPIService) initMatchLookupWorkspace(ctx *gin.Context) *handlerutil.HandlerWorkspace {
+	space := handlerutil.DefaultWorkspace()
+	binds := handlerutil.BindingsFromRequestContext(ctx, handlerutil.ShouldHaveURIValues|handlerutil.ShouldHaveHeaders)
 
 	space.Set(handlerutil.RequestBindings, binds)
 	space.Set(authTokenOptionsKey, srv.getTokenConfig())
@@ -335,6 +367,16 @@ func updateParticipantPipeline(ctx context.Context) (context.Context, context.Ca
 	return pipelineCtx, pipelineCancel, pipelineInput, pipelineOutput
 }
 
+// Function `removeParticipantPipeline` initializes a handling pipeline for removing a participant by its ID
+//
+// Parameters:
+//   - ctx: the parent context to control the created pipeline
+//
+// Returns:
+//   - `context.Context`: the context controlling the created pipeline (derived from the given context.Context)
+//   - `context.CancelCauseFunc`: the cancellation function controlling pipeline cancellation
+//   - `chan<- *handlerutil.HandlerWorkspace`: the input channel for the pipeline (send-only)
+//   - `<-chan *handlerutil.HandlerWorkspace`: the output channel for the pipeline (read-only)
 func removeParticipantPipeline(ctx context.Context) (context.Context, context.CancelCauseFunc, chan<- *handlerutil.HandlerWorkspace, <-chan *handlerutil.HandlerWorkspace) {
 	pipelineCtx, pipelineCancel := context.WithCancelCause(ctx)
 	pipelineInput := make(chan *handlerutil.HandlerWorkspace)
@@ -346,6 +388,153 @@ func removeParticipantPipeline(ctx context.Context) (context.Context, context.Ca
 	out5 := handlerutil.Stage(pipelineCtx, pipelineCancel, verifyEventOwnership, out4)
 	out6 := handlerutil.Stage(pipelineCtx, pipelineCancel, verifyEventModifiable, out5)
 	pipelineOutput := handlerutil.Stage(pipelineCtx, pipelineCancel, removeParticipantRecord, out6)
+
+	return pipelineCtx, pipelineCancel, pipelineInput, pipelineOutput
+}
+
+// Function `createMatchSetPipeline` initializes a handling pipeline for creating a single-elimination match set for the given event ID
+//
+// Parameters:
+//   - ctx: the parent context to control the created pipeline
+//
+// Returns:
+//   - `context.Context`: the context controlling the created pipeline (derived from the given context.Context)
+//   - `context.CancelCauseFunc`: the cancellation function controlling pipeline cancellation
+//   - `chan<- *handlerutil.HandlerWorkspace`: the input channel for the pipeline (send-only)
+//   - `<-chan *handlerutil.HandlerWorkspace`: the output channel for the pipeline (read-only)
+func createMatchSetPipeline(ctx context.Context) (context.Context, context.CancelCauseFunc, chan<- *handlerutil.HandlerWorkspace, <-chan *handlerutil.HandlerWorkspace) {
+	pipelineCtx, pipelineCancel := context.WithCancelCause(ctx)
+	pipelineInput := make(chan *handlerutil.HandlerWorkspace)
+
+	out1 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindAccessTokenFromHeader, pipelineInput)
+	out2 := handlerutil.Stage(pipelineCtx, pipelineCancel, validateAccessToken, out1)
+	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindEventLookupRequestFromURI, out2)
+	out4 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchEventRecordFromDatabaseByID, out3)
+	out5 := handlerutil.Stage(pipelineCtx, pipelineCancel, verifyEventOwnership, out4)
+	out6 := handlerutil.Stage(pipelineCtx, pipelineCancel, verifyEventModifiable, out5)
+	out7 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchParticipantsFromDatabaseByEventID, out6)
+	out8 := handlerutil.Stage(pipelineCtx, pipelineCancel, deriveMatchSetFromParticipantList, out7)
+	pipelineOutput := handlerutil.Stage(pipelineCtx, pipelineCancel, createMatchSetRecord, out8)
+
+	return pipelineCtx, pipelineCancel, pipelineInput, pipelineOutput
+}
+
+// Function `getMatchSetPipeline` initializes a handling pipeline for retrieving all matches associated with an event ID
+//
+// Parameters:
+//   - ctx: the parent context to control the created pipeline
+//
+// Returns:
+//   - `context.Context`: the context controlling the created pipeline (derived from the given context.Context)
+//   - `context.CancelCauseFunc`: the cancellation function controlling pipeline cancellation
+//   - `chan<- *handlerutil.HandlerWorkspace`: the input channel for the pipeline (send-only)
+//   - `<-chan *handlerutil.HandlerWorkspace`: the output channel for the pipeline (read-only)
+func getMatchSetPipeline(ctx context.Context) (context.Context, context.CancelCauseFunc, chan<- *handlerutil.HandlerWorkspace, <-chan *handlerutil.HandlerWorkspace) {
+	pipelineCtx, pipelineCancel := context.WithCancelCause(ctx)
+	pipelineInput := make(chan *handlerutil.HandlerWorkspace)
+
+	out1 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindAccessTokenFromHeader, pipelineInput)
+	out2 := handlerutil.Stage(pipelineCtx, pipelineCancel, validateAccessToken, out1)
+	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindEventLookupRequestFromURI, out2)
+	pipelineOutput := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchMatchSetFromDatabaseByEventID, out3)
+
+	return pipelineCtx, pipelineCancel, pipelineInput, pipelineOutput
+
+}
+
+// Function `getMatchPipeline` initializes a handling pipeline for finding a match by its ID
+//
+// Parameters:
+//   - ctx: the parent context to control the created pipeline
+//
+// Returns:
+//   - `context.Context`: the context controlling the created pipeline (derived from the given context.Context)
+//   - `context.CancelCauseFunc`: the cancellation function controlling pipeline cancellation
+//   - `chan<- *handlerutil.HandlerWorkspace`: the input channel for the pipeline (send-only)
+//   - `<-chan *handlerutil.HandlerWorkspace`: the output channel for the pipeline (read-only)
+func getMatchPipeline(ctx context.Context) (context.Context, context.CancelCauseFunc, chan<- *handlerutil.HandlerWorkspace, <-chan *handlerutil.HandlerWorkspace) {
+	pipelineCtx, pipelineCancel := context.WithCancelCause(ctx)
+	pipelineInput := make(chan *handlerutil.HandlerWorkspace)
+
+	out1 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindAccessTokenFromHeader, pipelineInput)
+	out2 := handlerutil.Stage(pipelineCtx, pipelineCancel, validateAccessToken, out1)
+	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindMatchLookupRequestFromURI, out2)
+	pipelineOutput := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchMatchFromDatabaseByID, out3)
+
+	return pipelineCtx, pipelineCancel, pipelineInput, pipelineOutput
+}
+
+// Function `tryResolveAwayParticipantPipeline` initializes a handling pipeline for resolving a match's away participant
+//
+// Parameters:
+//   - ctx: the parent context to control the created pipeline
+//
+// Returns:
+//   - `context.Context`: the context controlling the created pipeline (derived from the given context.Context)
+//   - `context.CancelCauseFunc`: the cancellation function controlling pipeline cancellation
+//   - `chan<- *handlerutil.HandlerWorkspace`: the input channel for the pipeline (send-only)
+//   - `<-chan *handlerutil.HandlerWorkspace`: the output channel for the pipeline (read-only)
+func tryResolveAwayParticipantPipeline(ctx context.Context) (context.Context, context.CancelCauseFunc, chan<- *handlerutil.HandlerWorkspace, <-chan *handlerutil.HandlerWorkspace) {
+	pipelineCtx, pipelineCancel := context.WithCancelCause(ctx)
+	pipelineInput := make(chan *handlerutil.HandlerWorkspace)
+
+	out1 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindAccessTokenFromHeader, pipelineInput)
+	out2 := handlerutil.Stage(pipelineCtx, pipelineCancel, validateAccessToken, out1)
+	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindMatchLookupRequestFromURI, out2)
+	out4 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchEventRecordFromDatabaseByID, out3)
+	out5 := handlerutil.Stage(pipelineCtx, pipelineCancel, verifyEventOwnership, out4)
+	out6 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchMatchFromDatabaseByID, out5)
+	pipelineOutput := handlerutil.Stage(pipelineCtx, pipelineCancel, updateAwayParticipantIfAvailable, out6)
+
+	return pipelineCtx, pipelineCancel, pipelineInput, pipelineOutput
+}
+
+// Function `tryResolveHomeParticipantPipeline` initializes a handling pipeline for resolving a match's home participant
+//
+// Parameters:
+//   - ctx: the parent context to control the created pipeline
+//
+// Returns:
+//   - `context.Context`: the context controlling the created pipeline (derived from the given context.Context)
+//   - `context.CancelCauseFunc`: the cancellation function controlling pipeline cancellation
+//   - `chan<- *handlerutil.HandlerWorkspace`: the input channel for the pipeline (send-only)
+//   - `<-chan *handlerutil.HandlerWorkspace`: the output channel for the pipeline (read-only)
+func tryResolveHomeParticipantPipeline(ctx context.Context) (context.Context, context.CancelCauseFunc, chan<- *handlerutil.HandlerWorkspace, <-chan *handlerutil.HandlerWorkspace) {
+	pipelineCtx, pipelineCancel := context.WithCancelCause(ctx)
+	pipelineInput := make(chan *handlerutil.HandlerWorkspace)
+
+	out1 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindAccessTokenFromHeader, pipelineInput)
+	out2 := handlerutil.Stage(pipelineCtx, pipelineCancel, validateAccessToken, out1)
+	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindMatchLookupRequestFromURI, out2)
+	out4 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchEventRecordFromDatabaseByID, out3)
+	out5 := handlerutil.Stage(pipelineCtx, pipelineCancel, verifyEventOwnership, out4)
+	out6 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchMatchFromDatabaseByID, out5)
+	pipelineOutput := handlerutil.Stage(pipelineCtx, pipelineCancel, updateHomeParticipantIfAvailable, out6)
+
+	return pipelineCtx, pipelineCancel, pipelineInput, pipelineOutput
+}
+
+// Function `declareMatchWinnerPipeline` initializes a handling pipeline for declaring a match winner
+//
+// Parameters:
+//   - ctx: the parent context to control the created pipeline
+//
+// Returns:
+//   - `context.Context`: the context controlling the created pipeline (derived from the given context.Context)
+//   - `context.CancelCauseFunc`: the cancellation function controlling pipeline cancellation
+//   - `chan<- *handlerutil.HandlerWorkspace`: the input channel for the pipeline (send-only)
+//   - `<-chan *handlerutil.HandlerWorkspace`: the output channel for the pipeline (read-only)
+func declareMatchWinnerPipeline(ctx context.Context) (context.Context, context.CancelCauseFunc, chan<- *handlerutil.HandlerWorkspace, <-chan *handlerutil.HandlerWorkspace) {
+	pipelineCtx, pipelineCancel := context.WithCancelCause(ctx)
+	pipelineInput := make(chan *handlerutil.HandlerWorkspace)
+
+	out1 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindAccessTokenFromHeader, pipelineInput)
+	out2 := handlerutil.Stage(pipelineCtx, pipelineCancel, validateAccessToken, out1)
+	out3 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindMatchLookupRequestFromURI, out2)
+	out4 := handlerutil.Stage(pipelineCtx, pipelineCancel, fetchEventRecordFromDatabaseByID, out3)
+	out5 := handlerutil.Stage(pipelineCtx, pipelineCancel, verifyEventOwnership, out4)
+	out6 := handlerutil.Stage(pipelineCtx, pipelineCancel, bindMatchWinnerDeclarationRequestFromBody, out5)
+	pipelineOutput := handlerutil.Stage(pipelineCtx, pipelineCancel, updateMatchWinnerByID, out6)
 
 	return pipelineCtx, pipelineCancel, pipelineInput, pipelineOutput
 }
@@ -504,6 +693,64 @@ func bindNewParticipantRequestFromBody(ctx context.Context, space *handlerutil.H
 	return nil
 }
 
+// Function `bindMatchLookupRequestFromURI` binds the request URI to the match lookup request format (and validates it)
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
+func bindMatchLookupRequestFromURI(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var uri models.MatchID
+	var bindings handlerutil.Bindings
+
+	log.Printf("[HANDLER]: loading request bindings from workspace...")
+	if err := space.Get(handlerutil.RequestBindings, &bindings); err != nil {
+		log.Printf("[HANDLER]: error loading request bindings from workspace (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: binding request uri to variable of type %T...", uri)
+	if err := bindings.BindURI(&uri); err != nil {
+		log.Printf("[HANDLER]: error binding request uri (%s)", err.Error())
+		return err
+	}
+
+	space.Set(matchLookupRequest, uri)
+	log.Printf("[HANDLER]: saved request body as variable of type %T within workspace under key %q", uri, matchLookupRequest)
+	return nil
+}
+
+// Function `bindMatchWinnerDeclarationRequestFromBody` binds the request body to the match winner declaration format (and validates it)
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
+func bindMatchWinnerDeclarationRequestFromBody(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var body models.DeclarMatchWinnerRequest
+	var bindings handlerutil.Bindings
+
+	log.Printf("[HANDLER]: loading request bindings from workspace...")
+	if err := space.Get(handlerutil.RequestBindings, &bindings); err != nil {
+		log.Printf("[HANDLER]: error loading request bindings from workspace (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: binding request uri to variable of type %T...", body)
+	if err := bindings.BindURI(&body); err != nil {
+		log.Printf("[HANDLER]: error binding request uri (%s)", err.Error())
+		return err
+	}
+
+	space.Set(matchDeclareWinnerRequest, body)
+	log.Printf("[HANDLER]: saved request body as variable of type %T within workspace under key %q", body, matchDeclareWinnerRequest)
+	return nil
+}
+
 // Function `verifyEventOwnership` checks that the owner of the event record is the same as presented in the access token
 //
 // Parameters:
@@ -656,6 +903,127 @@ func deriveParticipantRecordFromRequest(ctx context.Context, space *handlerutil.
 	return nil
 }
 
+// Function `deriveMatchSetFromParticipantList` uses the event participants within workspace to initialize a match bracket for an event
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
+func deriveMatchSetFromParticipantList(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var event models.EventRecord
+	var participantList []models.EventParticipant = make([]models.EventParticipant, 0)
+	var matchList []models.EventMatch = make([]models.EventMatch, 0)
+	var participantCount uint
+	var matchCount uint
+	var err error
+
+	log.Printf("[HANDLER]: loading participant list from workspace under %q into variable of type %T...", participantListRecordsKey, participantList)
+	if err = space.Get(participantListRecordsKey, &participantList); err != nil {
+		log.Printf("[HANDLER]: error loading participant list (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading event record from workspace under %q into variable of type %T...", eventRecordKey, event)
+	if err = space.Get(eventRecordKey, &event); err != nil {
+		log.Printf("[HANDLER]: error loading event record (%s)", err.Error())
+		return err
+	}
+
+	log.Print("[HANDLER]: validating that there are enough participants for a bracket...")
+	participantCount = uint(len(participantList))
+	if participantCount < 2 {
+		log.Printf("[HANDLER]: insufficient participants for a bracket (%d)", participantCount)
+		return errors.New("insufficient number of participants for competition")
+	}
+
+	log.Print("[HANDLER]: validating that there are a reasonable number of participant for a bracket...")
+	if participantCount > 256 {
+		log.Printf("[HANDLER]: too many participants for a bracket (%d)", participantCount)
+		return errors.New("too many participants for competition")
+	}
+	log.Printf("[HANDLER]: creating matchset for %d participants", participantCount)
+	matchCount = 1 << bits.Len(participantCount-1)
+
+	log.Print("[HANDLER]: populating match list with unlinked match records...")
+	for i := 0; i < int(matchCount); i++ {
+		matchList = append(matchList, models.EventMatch{
+			ID:               bson.NewObjectID(),
+			TakesPlaceDuring: event.ID,
+		})
+	}
+
+	log.Print("[HANDLER]: relating matches as a binary heap...")
+	for i := 0; i < int(matchCount); i++ {
+		awayIdx := 2*i + 1
+		if awayIdx >= 0 && awayIdx < int(matchCount) {
+			matchList[i].AwayParticipant = matchList[awayIdx].ID
+			matchList[i].AwayRef = models.ParticipantFieldReferencesMatch
+		}
+
+		homeIdx := 2*i + 2
+		if homeIdx >= 0 && homeIdx < int(matchCount) {
+			matchList[i].HomeParticipant = matchList[homeIdx].ID
+			matchList[i].HomeRef = models.ParticipantFieldReferencesMatch
+		}
+	}
+
+	log.Print("[HANDLER]: seeding first round matches...")
+	home := 0
+	away := int(matchCount) - 1
+	for i := int(matchCount) / 2; i < int(matchCount); i++ {
+		if home >= 0 && home < len(participantList) {
+			matchList[i].HomeParticipant = participantList[home].ID
+			matchList[i].HomeRef = models.ParticipantFieldReferencesPlayer
+		} else {
+			matchList[i].HomeParticipant = bson.NilObjectID
+			matchList[i].HomeRef = models.ParticipantFieldReferencesBye
+		}
+
+		if away >= 0 && away < len(participantList) {
+			matchList[i].AwayParticipant = participantList[away].ID
+			matchList[i].AwayRef = models.ParticipantFieldReferencesPlayer
+		} else {
+			matchList[i].AwayParticipant = bson.NilObjectID
+			matchList[i].AwayRef = models.ParticipantFieldReferencesBye
+		}
+
+		home++
+		away--
+	}
+
+	log.Print("[HANDLER]: propogating BYE matches...")
+	for i := int(matchCount); i >= 0; i-- {
+		if matchList[i].AwayParticipant == bson.NilObjectID && matchList[i].HomeParticipant != bson.NilObjectID {
+			matchList[i].Winner = matchList[i].HomeParticipant
+		}
+		if matchList[i].AwayParticipant != bson.NilObjectID && matchList[i].HomeParticipant == bson.NilObjectID {
+			matchList[i].Winner = matchList[i].AwayParticipant
+		}
+		if matchList[i].HomeRef == models.ParticipantFieldReferencesMatch {
+			feederIdx := slices.IndexFunc(matchList, func(e models.EventMatch) bool { return e.ID == matchList[i].HomeParticipant })
+			if feederIdx == -1 || matchList[feederIdx].Winner == bson.NilObjectID {
+				continue
+			}
+			matchList[i].HomeParticipant = matchList[feederIdx].Winner
+			matchList[i].HomeRef = models.ParticipantFieldReferencesPlayer
+		}
+		if matchList[i].AwayRef == models.ParticipantFieldReferencesMatch {
+			feederIdx := slices.IndexFunc(matchList, func(e models.EventMatch) bool { return e.ID == matchList[i].AwayParticipant })
+			if feederIdx == -1 || matchList[feederIdx].Winner == bson.NilObjectID {
+				continue
+			}
+			matchList[i].AwayParticipant = matchList[feederIdx].Winner
+			matchList[i].AwayRef = models.ParticipantFieldReferencesPlayer
+		}
+	}
+
+	log.Print("[HANDLER]: match set initialized")
+	space.Set(matchListRecordKey, matchList)
+	return nil
+}
+
 // Function `createEventRecord` inserts the event record within the workspace into the database
 //
 // Parameters:
@@ -746,6 +1114,53 @@ func createParticipantRecord(ctx context.Context, space *handlerutil.HandlerWork
 	space.Set(participatIDResponseKey, models.ParticipantID{EID: player.ParticipatesIn.Hex(), PID: player.ID.Hex()})
 	return err
 
+}
+
+// Function `createMatchSetRecord` creates the matches associated with an event
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
+func createMatchSetRecord(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var sess *mongo.Session
+	var matches []models.EventMatch = make([]models.EventMatch, 0)
+	var cfg *options.InsertManyOptionsBuilder
+	var err error
+
+	log.Printf("[HANDLER]: loading record data from workspace under the %q key into variable of type %T...", matchListRecordKey, matches)
+	if err = space.Get(matchListRecordKey, &matches); err != nil {
+		log.Printf("[HANDLER]: error loading participant record data (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading database operation settings...")
+	if cfg, err = dbx.NewOptions(dbx.ValidateInsertedDocuments(true), dbx.StopOnError(true)); err != nil {
+		log.Printf("[HANDLER]: error configuration database operation (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading database session from request context...")
+	if sess, err = dbx.MongoFromContext(ctx); err != nil {
+		log.Printf("[HANDLER]: error loading database session from request context (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: performing database insertion operation...")
+	_, err = sess.Client().
+		Database(models.MatchQueryContext.Database).
+		Collection(models.MatchQueryContext.Collection).
+		InsertMany(ctx, matches, cfg)
+
+	if err != nil {
+		log.Printf("[HANDLER]: error during insertion operation (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: inserted %d match records", len(matches))
+	return nil
 }
 
 // Function `fetchEventRecordFromDatabaseByID` finds the event record within the workspace into the database
@@ -959,6 +1374,99 @@ func updateParticipantRecord(ctx context.Context, space *handlerutil.HandlerWork
 	return nil
 }
 
+// Function `updateMatchWinnerByID` sets the winner field for a given match
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
+func updateMatchWinnerByID(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var modify models.DeclarMatchWinnerRequest
+	var which models.MatchID
+	var winner bson.ObjectID
+	var matchID bson.ObjectID
+	var eventID bson.ObjectID
+	var cfg *options.UpdateOneOptionsBuilder
+	var err error
+	var sess *mongo.Session
+	var res *mongo.UpdateResult
+
+	log.Printf("[HANDLER]: loading match update request from workspace under %q key into variable of type %T...", matchDeclareWinnerRequest, modify)
+	if err := space.Get(matchDeclareWinnerRequest, &modify); err != nil {
+		log.Printf("[HANDLER]: error loading update request (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading match lookup request from workspace under %q key into variable of type %T...", matchLookupRequest, which)
+	if err := space.Get(matchLookupRequest, &which); err != nil {
+		log.Printf("[HANDLER]: error loading lookup request (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: interpreting ID presented in lookup request as an ObjectID...")
+	if matchID, err = bson.ObjectIDFromHex(which.MID); err != nil {
+		log.Printf("[HANDLER]: could not interpret provided ID as an ObjectID (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: interpreting ID presented in lookup request as an ObjectID...")
+	if eventID, err = bson.ObjectIDFromHex(which.EID); err != nil {
+		log.Printf("[HANDLER]: could not interpret provided ID as an ObjectID (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: interpreting ID presented in lookup request as an ObjectID...")
+	if winner, err = bson.ObjectIDFromHex(modify.DeclareWinner); err != nil {
+		log.Printf("[HANDLER]: could not interpret provided ID as an ObjectID (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading database operation settings...")
+	if cfg, err = dbx.NewOptions(dbx.ValidateUpdatedDocument(true), dbx.DoInsertOnNoMatchFound(false)); err != nil {
+		log.Printf("[HANDLER]: error configuration database operation (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading database session from request context...")
+	if sess, err = dbx.MongoFromContext(ctx); err != nil {
+		log.Printf("[HANDLER]: error loading database session from request context (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: running database update operation...")
+	res, err = sess.Client().
+		Database(models.MatchQueryContext.Database).
+		Collection(models.MatchQueryContext.Collection).
+		UpdateOne(
+			ctx,
+			bson.D{
+				{Key: "_id", Value: matchID},
+				{Key: "takes_place_during", Value: eventID},
+				{Key: "away_ref", Value: models.ParticipantFieldReferencesPlayer},
+				{Key: "home_ref", Value: models.ParticipantFieldReferencesPlayer},
+				{Key: "$or", Value: bson.D{{Key: "away", Value: winner}, {Key: "home", Value: winner}}},
+			},
+			bson.D{{Key: "$set", Value: bson.D{{Key: "winner", Value: winner}}}},
+			cfg,
+		)
+
+	if err != nil {
+		log.Printf("[HANDLER]: error during database update operation (%s)", err.Error())
+		return err
+	}
+
+	if res.ModifiedCount != 1 {
+		log.Printf("[HANDLER]: incorrect number of documents updated (found %d; update %d)", res.MatchedCount, res.ModifiedCount)
+		return errors.New("update not properly applied")
+	}
+
+	log.Printf("[HANDLER]: declared winner for match (_id=%s)", matchID.Hex())
+	space.Set(matchIDResponseKey, which)
+	return nil
+}
+
 // Function `removeParticipantRecord` removes the specific participants record within the workspace into the database
 //
 // Parameters:
@@ -1073,11 +1581,19 @@ func fetchParticipantsFromDatabaseByEventID(ctx context.Context, space *handleru
 		return err
 	}
 
-	log.Printf("[HANDLER]: found participants (%v)", participants)
+	log.Printf("[HANDLER]: found %d participants", len(participants))
 	space.Set(participantListRecordsKey, participants)
 	return nil
 }
 
+// Function `fetchParticipantFromDatabaseByPlayerID` finds the participant with the given ID
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
 func fetchParticipantFromDatabaseByPlayerID(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
 	var sess *mongo.Session
 	var reqPlayer models.ParticipantID
@@ -1127,6 +1643,268 @@ func fetchParticipantFromDatabaseByPlayerID(ctx context.Context, space *handleru
 	space.Set(participantRecordKey, player)
 	return nil
 
+}
+
+// Function `fetchMatchSetFromDatabaseByEventID` finds the match set associated with the given event ID
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
+func fetchMatchSetFromDatabaseByEventID(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var sess *mongo.Session
+	var cur *mongo.Cursor
+	var matches []models.EventMatch = make([]models.EventMatch, 0)
+	var req models.EventID
+	var id bson.ObjectID
+	var err error
+
+	log.Printf("[HANDLER]: loading event lookup request from workspace under %q key into variable of type %T...", eventLookupRequest, req)
+	if err := space.Get(eventLookupRequest, &req); err != nil {
+		log.Printf("[HANDLER]: error loading lookup request (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: interpreting ID presented in lookup request as an ObjectID...")
+	if id, err = bson.ObjectIDFromHex(req.ID); err != nil {
+		log.Printf("[HANDLER]: could not interpret provided ID as an ObjectID (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading database session from request context...")
+	if sess, err = dbx.MongoFromContext(ctx); err != nil {
+		log.Printf("[HANDLER]: error loading database session from request context (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: performing database lookup operation")
+	filter := bson.D{{Key: "takes_place_during", Value: id}}
+	cur, err = sess.Client().
+		Database(models.MatchQueryContext.Database).
+		Collection(models.MatchQueryContext.Collection).
+		Find(ctx, filter)
+
+	if err != nil {
+		log.Printf("[HANDLER]: error during database lookup operation (%s)", err.Error())
+		return err
+	}
+
+	if err = cur.All(ctx, &matches); err != nil {
+		log.Printf("[HANDLER]: error during database lookup operation (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: found %d matches", len(matches))
+	space.Set(matchListRecordKey, matches)
+	return nil
+}
+
+// Function `fetchMatchFromDatabaseByID` fetches the match associated with the given ID
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
+func fetchMatchFromDatabaseByID(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var sess *mongo.Session
+	var req models.MatchID
+	var eventID bson.ObjectID
+	var matchID bson.ObjectID
+	var match models.EventMatch
+	var err error
+
+	log.Printf("[HANDLER]: loading match lookup request from workspace under %q key into variable of type %T...", matchLookupRequest, req)
+	if err := space.Get(matchLookupRequest, &req); err != nil {
+		log.Printf("[HANDLER]: error loading lookup request (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: interpreting ID presented in lookup request as an ObjectID...")
+	if eventID, err = bson.ObjectIDFromHex(req.EID); err != nil {
+		log.Printf("[HANDLER]: could not interpret provided ID as an ObjectID (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: interpreting ID presented in lookup request as an ObjectID...")
+	if matchID, err = bson.ObjectIDFromHex(req.MID); err != nil {
+		log.Printf("[HANDLER]: could not interpret provided ID as an ObjectID (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: loading database session from request context...")
+	if sess, err = dbx.MongoFromContext(ctx); err != nil {
+		log.Printf("[HANDLER]: error loading database session from request context (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: performing database lookup operation")
+	filter := bson.D{{Key: "_id", Value: matchID}, {Key: "takes_place_during", Value: eventID}}
+	err = sess.Client().
+		Database(models.ParticipantQueryContext.Database).
+		Collection(models.ParticipantQueryContext.Collection).
+		FindOne(ctx, filter).
+		Decode(&match)
+
+	if err != nil {
+		log.Printf("[HANDLER]: error during database lookup operation (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: found match (%v)", match)
+	space.Set(matchRecordKey, match)
+	return nil
+}
+
+// Function `updateAwayParticipantIfAvailable` update the ID references in a matches away participant field if the reference points to another match with a "winner" existing
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
+func updateAwayParticipantIfAvailable(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var sess *mongo.Session
+	var match models.EventMatch
+	var feeder models.EventMatch
+	var err error
+	var res *mongo.UpdateResult
+
+	log.Printf("[HANDLER]: loading match record from workspace under %q key into variable of type %T...", matchRecordKey, match)
+	if err := space.Get(matchRecordKey, &match); err != nil {
+		log.Printf("[HANDLER]: error loading match record (%s)", err.Error())
+		return err
+	}
+
+	if match.AwayRef != models.ParticipantFieldReferencesMatch {
+		log.Printf("[HANDLER]: target match record is not referencing another match for field %q", "away_ref")
+		return errors.New("cannot resolve away participant when not referencing another match")
+	}
+
+	log.Printf("[HANDLER]: loading database session from request context...")
+	if sess, err = dbx.MongoFromContext(ctx); err != nil {
+		log.Printf("[HANDLER]: error loading database session from request context (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: performing database lookup operation (feeder match)")
+	filter := bson.D{
+		{Key: "_id", Value: match.AwayParticipant},
+		{Key: "takes_place_during", Value: match.TakesPlaceDuring},
+		{Key: "winner", Value: bson.D{{Key: "$exists", Value: true}}},
+	}
+	err = sess.Client().
+		Database(models.MatchQueryContext.Database).
+		Collection(models.MatchQueryContext.Collection).
+		FindOne(ctx, filter).
+		Decode(&feeder)
+
+	if err != nil {
+		log.Printf("[HANDLER]: error during database lookup operation (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: performing database update operation (target match)")
+	res, err = sess.Client().
+		Database(models.MatchQueryContext.Database).
+		Collection(models.MatchQueryContext.Collection).
+		UpdateByID(
+			ctx,
+			match.ID,
+			bson.D{{Key: "$set", Value: bson.D{{Key: "away", Value: feeder.Winner}, {Key: "away_ref", Value: models.ParticipantFieldReferencesPlayer}}}},
+		)
+
+	if err != nil {
+		log.Printf("[HANDLER]: error during database update operation (%s)", err.Error())
+		return err
+	}
+
+	if res.ModifiedCount != 1 {
+		log.Printf("[HANDLER]: incorrect number of documents updated (found %d; update %d)", res.MatchedCount, res.ModifiedCount)
+		return errors.New("update not properly applied")
+	}
+
+	space.Set(matchIDResponseKey, models.MatchID{EID: match.TakesPlaceDuring.Hex(), MID: match.ID.Hex()})
+	log.Printf("[HANDLER]: update applied to event (_id=%q)", match.ID.Hex())
+	return nil
+}
+
+// Function `updateHomeParticipantIfAvailable` update the ID references in a matches home participant field if the reference points to another match with a "winner" existing
+//
+// Parameters:
+//   - ctx: the context managing the lifecycle of this handler
+//   - space: the workspace to utilize
+//
+// Returns:
+//   - `error`: error that occurred during this processing step
+func updateHomeParticipantIfAvailable(ctx context.Context, space *handlerutil.HandlerWorkspace) error {
+	var sess *mongo.Session
+	var match models.EventMatch
+	var feeder models.EventMatch
+	var err error
+	var res *mongo.UpdateResult
+
+	log.Printf("[HANDLER]: loading match record from workspace under %q key into variable of type %T...", matchRecordKey, match)
+	if err := space.Get(matchRecordKey, &match); err != nil {
+		log.Printf("[HANDLER]: error loading match record (%s)", err.Error())
+		return err
+	}
+
+	if match.HomeRef != models.ParticipantFieldReferencesMatch {
+		log.Printf("[HANDLER]: target match record is not referencing another match for field %q", "home_ref")
+		return errors.New("cannot resolve home participant when not referencing another match")
+	}
+
+	log.Printf("[HANDLER]: loading database session from request context...")
+	if sess, err = dbx.MongoFromContext(ctx); err != nil {
+		log.Printf("[HANDLER]: error loading database session from request context (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: performing database lookup operation (feeder match)")
+	filter := bson.D{
+		{Key: "_id", Value: match.HomeParticipant},
+		{Key: "takes_place_during", Value: match.TakesPlaceDuring},
+		{Key: "winner", Value: bson.D{{Key: "$exists", Value: true}}},
+	}
+	err = sess.Client().
+		Database(models.MatchQueryContext.Database).
+		Collection(models.MatchQueryContext.Collection).
+		FindOne(ctx, filter).
+		Decode(&feeder)
+
+	if err != nil {
+		log.Printf("[HANDLER]: error during database lookup operation (%s)", err.Error())
+		return err
+	}
+
+	log.Printf("[HANDLER]: performing database update operation (target match)")
+	res, err = sess.Client().
+		Database(models.MatchQueryContext.Database).
+		Collection(models.MatchQueryContext.Collection).
+		UpdateByID(
+			ctx,
+			match.ID,
+			bson.D{{Key: "$set", Value: bson.D{{Key: "Home", Value: feeder.Winner}, {Key: "home_ref", Value: models.ParticipantFieldReferencesPlayer}}}},
+		)
+
+	if err != nil {
+		log.Printf("[HANDLER]: error during database update operation (%s)", err.Error())
+		return err
+	}
+
+	if res.ModifiedCount != 1 {
+		log.Printf("[HANDLER]: incorrect number of documents updated (found %d; update %d)", res.MatchedCount, res.ModifiedCount)
+		return errors.New("update not properly applied")
+	}
+
+	space.Set(matchIDResponseKey, models.MatchID{EID: match.TakesPlaceDuring.Hex(), MID: match.ID.Hex()})
+	log.Printf("[HANDLER]: update applied to event (_id=%q)", match.ID.Hex())
+	return nil
 }
 
 // Function `removeEventRecordByID` deletes the event participants record within the workspace into the database

@@ -251,6 +251,93 @@ func (srv *tournabyteAPIService) addEventGroup(parentGroup *gin.RouterGroup) {
 		),
 	)
 
-	// PATCH /v1/events/{id}/bracket
-	// GET /v1/events/{id}/bracket
+	// POST /v1/events/{id}/matches
+	eventGroup.POST(
+		"/:eventid/matches",
+		srv.withMongoSession,
+		srv.withMongoTransaction,
+		handlerutil.HandlerTemplate(
+			srv.initEventLookupWorkspace,
+			createMatchSetPipeline,
+			handlerutil.AwaitAndRespondAs[models.EventID],
+			http.StatusCreated,
+			eventIDResponseKey,
+			srv.errfmt,
+		),
+	)
+
+	// GET /v1/events/{id}/matches
+	eventGroup.GET(
+		"/:eventid/matches",
+		srv.withMongoSession,
+		srv.withMongoTransaction,
+		handlerutil.HandlerTemplate(
+			srv.initEventLookupWorkspace,
+			getMatchSetPipeline,
+			handlerutil.AwaitAndRespondAs[[]models.EventMatch],
+			http.StatusOK,
+			matchListRecordKey,
+			srv.errfmt,
+		),
+	)
+
+	// GET /v1/events/{id}/matches/{id}
+	eventGroup.GET(
+		"/:eventid/matches/:matchid",
+		srv.withMongoSession,
+		srv.withMongoTransaction,
+		handlerutil.HandlerTemplate(
+			srv.initMatchLookupWorkspace,
+			getMatchPipeline,
+			handlerutil.AwaitAndRespondAs[models.EventMatch],
+			http.StatusOK,
+			matchRecordKey,
+			srv.errfmt,
+		),
+	)
+
+	// PATCH /v1/events/{id}/matches/{id}/away-participant
+	eventGroup.PATCH(
+		"/:eventid/matches/:matchid/away-participant",
+		srv.withMongoSession,
+		srv.withMongoTransaction,
+		handlerutil.HandlerTemplate(
+			srv.initMatchLookupWorkspace,
+			tryResolveAwayParticipantPipeline,
+			handlerutil.AwaitAndRespondAs[models.MatchID],
+			http.StatusOK,
+			matchIDResponseKey,
+			srv.errfmt,
+		),
+	)
+
+	// PATCH /v1/events/{id}/matches/{id}/home-participant
+	eventGroup.PATCH(
+		"/:eventid/matches/:matchid/home-participant",
+		srv.withMongoSession,
+		srv.withMongoTransaction,
+		handlerutil.HandlerTemplate(
+			srv.initMatchLookupWorkspace,
+			tryResolveHomeParticipantPipeline,
+			handlerutil.AwaitAndRespondAs[models.MatchID],
+			http.StatusOK,
+			matchIDResponseKey,
+			srv.errfmt,
+		),
+	)
+
+	// PATCH /v1/events/{id}/matches/{id}/declared-winner
+	eventGroup.PATCH(
+		"/:eventid/matches/:matchid/declared-winner",
+		srv.withMongoSession,
+		srv.withMongoTransaction,
+		handlerutil.HandlerTemplate(
+			srv.initMatchLookupWorkspace,
+			declareMatchWinnerPipeline,
+			handlerutil.AwaitAndRespondAs[models.MatchID],
+			http.StatusOK,
+			matchIDResponseKey,
+			srv.errfmt,
+		),
+	)
 }

@@ -25,9 +25,12 @@ var (
 
 // Constants storing status values for an event's status field
 const (
-	StatusPlanned    = "PLANNED"
-	StatusInProgress = "IN-PROGRESS"
-	StatusConcluded  = "CONCLUDED"
+	StatusPlanned                    = "PLANNED"
+	StatusInProgress                 = "IN-PROGRESS"
+	StatusConcluded                  = "CONCLUDED"
+	ParticipantFieldReferencesMatch  = "MATCH"
+	ParticipantFieldReferencesPlayer = "PARTICIPANT"
+	ParticipantFieldReferencesBye    = "BYE"
 )
 
 // Type `CreateEventRequest` represents the request body format for the create event endpoint
@@ -130,4 +133,22 @@ type EventMatch struct {
 	HomeRef          string        `json:"-" bson:"home_ref"`
 	Winner           bson.ObjectID `json:"winner,omitempty" bson:"winner,omitempty"`
 	TakesPlaceDuring bson.ObjectID `json:"takesPlaceDuring" bson:"takes_place_during"`
+}
+
+// Type `MatchID` represents the request URI for looking up a match
+//
+// Fields:
+//   - EID: the event ID the match is part of
+//   - MID: the match ID within the event
+type MatchID struct {
+	EID string `uri:"eventid" binding:"required,mongodb" json:"eventid"`
+	MID string `uri:"matchid" binding:"required,mongodb" json:"matchid"`
+}
+
+// Type `DeclarMatchWinnerRequest` represents the request body for declaring a winner for a match
+//
+// Fields:
+//   - DeclareWinner: the winner being declared
+type DeclarMatchWinnerRequest struct {
+	DeclareWinner string `json:"declareWinner" binding:"required,mongodb"`
 }
