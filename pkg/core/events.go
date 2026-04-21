@@ -16,7 +16,6 @@ import (
 	"errors"
 	"log"
 	"math/bits"
-	"slices"
 
 	"github.com/gin-gonic/gin"
 	"github.com/tournabyte/webapi/pkg/dbx"
@@ -1003,20 +1002,18 @@ func deriveMatchSetFromParticipantList(ctx context.Context, space *handlerutil.H
 			matchList[i].Winner = matchList[i].AwayParticipant
 		}
 		if matchList[i].HomeRef == models.ParticipantFieldReferencesMatch {
-			feederIdx := slices.IndexFunc(matchList, func(e models.EventMatch) bool { return e.ID == matchList[i].HomeParticipant })
-			if feederIdx == -1 || matchList[feederIdx].Winner == bson.NilObjectID {
-				continue
+			feederIdx := 2*i + 2
+			if feederIdx >= 0 && feederIdx < int(matchCount) && matchList[feederIdx].Winner != bson.NilObjectID {
+				matchList[i].HomeParticipant = matchList[feederIdx].Winner
+				matchList[i].HomeRef = models.ParticipantFieldReferencesPlayer
 			}
-			matchList[i].HomeParticipant = matchList[feederIdx].Winner
-			matchList[i].HomeRef = models.ParticipantFieldReferencesPlayer
 		}
 		if matchList[i].AwayRef == models.ParticipantFieldReferencesMatch {
-			feederIdx := slices.IndexFunc(matchList, func(e models.EventMatch) bool { return e.ID == matchList[i].AwayParticipant })
-			if feederIdx == -1 || matchList[feederIdx].Winner == bson.NilObjectID {
-				continue
+			feederIdx := 2*i + 1
+			if feederIdx >= 0 && feederIdx < int(matchCount) && matchList[feederIdx].Winner != bson.NilObjectID {
+				matchList[i].AwayParticipant = matchList[feederIdx].Winner
+				matchList[i].AwayRef = models.ParticipantFieldReferencesPlayer
 			}
-			matchList[i].AwayParticipant = matchList[feederIdx].Winner
-			matchList[i].AwayRef = models.ParticipantFieldReferencesPlayer
 		}
 	}
 
