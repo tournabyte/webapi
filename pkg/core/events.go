@@ -972,7 +972,7 @@ func deriveMatchSetFromParticipantList(ctx context.Context, space *handlerutil.H
 
 	log.Print("[HANDLER]: seeding first round matches...")
 	home := 0
-	away := int(matchCount) - 1
+	away := int(matchCount)
 	for i := int(matchCount) / 2; i < int(matchCount); i++ {
 		if home >= 0 && home < len(participantList) {
 			matchList[i].HomeParticipant = participantList[home].ID
