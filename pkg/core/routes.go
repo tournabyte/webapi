@@ -332,7 +332,7 @@ func (srv *tournabyteAPIService) addEventGroup(parentGroup *gin.RouterGroup) {
 		srv.withMongoSession,
 		srv.withMongoTransaction,
 		handlerutil.HandlerTemplate(
-			srv.initMatchLookupWorkspace,
+			srv.initMatchUpdateWorkspace,
 			declareMatchWinnerPipeline,
 			handlerutil.AwaitAndRespondAs[models.MatchID],
 			http.StatusOK,

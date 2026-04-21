@@ -172,6 +172,24 @@ func (srv *tournabyteAPIService) initMatchLookupWorkspace(ctx *gin.Context) *han
 	return &space
 }
 
+// Function `(*tournabyteAPIService).initMatchUpdateWorkspace` initializes the handler workspace for an update match request handling sequence
+//
+// Parameters:
+//   - ctx: the request context to use during workspace initialization
+//
+// Returns:
+//   - `*handlerutil.HandlerWorkspace`: the workspace for finding a participant
+func (srv *tournabyteAPIService) initMatchUpdateWorkspace(ctx *gin.Context) *handlerutil.HandlerWorkspace {
+	space := handlerutil.DefaultWorkspace()
+	binds := handlerutil.BindingsFromRequestContext(ctx, handlerutil.ShouldHaveURIValues|handlerutil.ShouldHaveHeaders|handlerutil.ShouldHaveJSONBody)
+
+	space.Set(handlerutil.RequestBindings, binds)
+	space.Set(authTokenOptionsKey, srv.getTokenConfig())
+	space.Set(models.ValidatorObjectKey, srv.validationFunc)
+	log.Printf("[HANDLER]: setup request bindings")
+	return &space
+}
+
 // Function `eventCreationPipeline` initializes a handling pipeline for event creation
 //
 // Parameters:
