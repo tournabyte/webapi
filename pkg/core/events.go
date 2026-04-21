@@ -1742,8 +1742,8 @@ func fetchMatchFromDatabaseByID(ctx context.Context, space *handlerutil.HandlerW
 	log.Printf("[HANDLER]: performing database lookup operation")
 	filter := bson.D{{Key: "_id", Value: matchID}, {Key: "takes_place_during", Value: eventID}}
 	err = sess.Client().
-		Database(models.ParticipantQueryContext.Database).
-		Collection(models.ParticipantQueryContext.Collection).
+		Database(models.MatchQueryContext.Database).
+		Collection(models.MatchQueryContext.Collection).
 		FindOne(ctx, filter).
 		Decode(&match)
 
