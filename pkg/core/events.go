@@ -944,8 +944,8 @@ func deriveMatchSetFromParticipantList(ctx context.Context, space *handlerutil.H
 		log.Printf("[HANDLER]: too many participants for a bracket (%d)", participantCount)
 		return errors.New("too many participants for competition")
 	}
-	log.Printf("[HANDLER]: creating matchset for %d participants", participantCount)
-	matchCount = 1 << bits.Len(participantCount-1)
+	matchCount = (1 << bits.Len(participantCount-1)) - 1
+	log.Printf("[HANDLER]: creating matchset for %d participants (%d matches needed)", participantCount, matchCount)
 
 	log.Print("[HANDLER]: populating match list with unlinked match records...")
 	for i := 0; i < int(matchCount); i++ {
