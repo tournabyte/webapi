@@ -1460,9 +1460,10 @@ func updateMatchWinnerByID(ctx context.Context, space *handlerutil.HandlerWorksp
 			bson.D{
 				{Key: "_id", Value: matchID},
 				{Key: "takes_place_during", Value: eventID},
-				{Key: "away_ref", Value: models.ParticipantFieldReferencesPlayer},
-				{Key: "home_ref", Value: models.ParticipantFieldReferencesPlayer},
-				{Key: "$or", Value: bson.A{bson.E{Key: "away", Value: winner}, bson.E{Key: "home", Value: winner}}},
+				{Key: "$or", Value: bson.A{
+					bson.D{{Key: "home", Value: winner}, {Key: "home_ref", Value: models.ParticipantFieldReferencesPlayer}},
+					bson.D{{Key: "away", Value: winner}, {Key: "away_ref", Value: models.ParticipantFieldReferencesPlayer}},
+				}},
 			},
 			bson.D{{Key: "$set", Value: bson.D{{Key: "winner", Value: winner}}}},
 			cfg,
