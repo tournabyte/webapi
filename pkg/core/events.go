@@ -1906,7 +1906,7 @@ func updateHomeParticipantIfAvailable(ctx context.Context, space *handlerutil.Ha
 		UpdateByID(
 			ctx,
 			match.ID,
-			bson.D{{Key: "$set", Value: bson.D{{Key: "Home", Value: feeder.Winner}, {Key: "home_ref", Value: models.ParticipantFieldReferencesPlayer}}}},
+			bson.D{{Key: "$set", Value: bson.D{{Key: "home", Value: feeder.Winner}, {Key: "home_ref", Value: models.ParticipantFieldReferencesPlayer}}}},
 		)
 
 	if err != nil {
